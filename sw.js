@@ -1,5 +1,5 @@
-const CACHE = "fleet-v3";
-const ASSETS = ["/", "/index.html"];
+const CACHE = "fleet-v5";
+const ASSETS = ["/fleet/", "/fleet/index.html"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
