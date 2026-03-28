@@ -11,6 +11,8 @@
 <link rel="manifest" href="manifest.json"/>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
 body{background:#0a0c14;font-family:'Cairo',sans-serif;direction:rtl;color:#e8eaf0;min-height:100vh;}
@@ -56,10 +58,35 @@ canvas{touch-action:none;}
 // ════════════════════════════════════════════════════
 // CORE
 // ════════════════════════════════════════════════════
+const SUPA=supabase.createClient(
+  "https://rxvmdobbfnthsuqhojxk.supabase.co",
+  "sb_publishable_t3ZpB2tZSG115j5-aOQHpg_hG26MSj9"
+);
 const db={
   get(k){try{const v=localStorage.getItem("gm_"+k);return v?JSON.parse(v):null;}catch{return null;}},
   set(k,v){try{localStorage.setItem("gm_"+k,JSON.stringify(v));}catch{}}
 };
+let _syncT=null;
+function syncCloud(){
+  clearTimeout(_syncT);
+  _syncT=setTimeout(async()=>{
+    try{
+      await SUPA.from("fleet_data").upsert({
+        id:"main",
+        violations:S.violations,
+        vehicles:S.vehicles,
+        handovers:S.handovers,
+        maintenance:S.maintenance,
+        fuel:S.fuel,
+        note_options:S.noteOptions,
+        equip_list:S.equipList,
+        my_phone:S.myPhone,
+        saved_pw:S.savedPw,
+        updated_at:new Date().toISOString()
+      });
+    }catch(e){console.warn("Cloud sync error",e);}
+  },1000);
+}
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2);
 const toDateStr=d=>d?new Date(d).toLocaleDateString("ar-JO"):"—";
 const daysDiff=(from,to=new Date())=>Math.floor((new Date(to)-new Date(from))/86400000);
@@ -90,7 +117,7 @@ function loadState(){
 }
 
 const DBMAP={violations:"violations",vehicles:"vehicles",handovers:"handovers",maintenance:"maint",fuel:"fuel",noteOptions:"noteOpts",equipList:"equipList",myPhone:"myPhone",savedPw:"pw2"};
-function save(key,val){S[key]=val;if(DBMAP[key])db.set(DBMAP[key],val);}
+function save(key,val){S[key]=val;if(DBMAP[key])db.set(DBMAP[key],val);syncCloud();}
 
 // ════════════════════════════════════════════════════
 // DOM HELPERS
@@ -1216,9 +1243,33 @@ function importXLS(file,onDone){
 // ════════════════════════════════════════════════════
 // INIT
 // ════════════════════════════════════════════════════
-loadState();
-document.getElementById("ls").remove();
-render();
+async function initApp(){
+  // Try load from Supabase first
+  try{
+    const{data,error}=await SUPA.from("fleet_data").select("*").eq("id","main").single();
+    if(data&&!error){
+      if(data.saved_pw)S.savedPw=data.saved_pw;
+      if(data.violations)S.violations=data.violations;
+      if(data.vehicles)S.vehicles=data.vehicles;
+      if(data.handovers)S.handovers=data.handovers;
+      if(data.maintenance)S.maintenance=data.maintenance;
+      if(data.fuel)S.fuel=data.fuel;
+      if(data.note_options&&data.note_options.length)S.noteOptions=data.note_options;
+      if(data.equip_list&&data.equip_list.length)S.equipList=data.equip_list;
+      if(data.my_phone)S.myPhone=data.my_phone;
+    }else{
+      // Fallback to localStorage
+      loadState();
+    }
+  }catch(e){
+    // Fallback to localStorage
+    loadState();
+  }
+  if(localStorage.getItem("gm_loggedin")==="1")S.screen="main";
+  document.getElementById("ls").remove();
+  render();
+}
+initApp();
 </script>
 </body>
 </html>
