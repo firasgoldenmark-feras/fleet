@@ -139,6 +139,19 @@ function el(tag,attrs={},...children){
   return e;
 }
 
+function mkConfirm(msg,onYes){
+  const overlay=el("div",{className:"modal-overlay",onClick:()=>overlay.remove()});
+  const box=el("div",{style:{background:"#12151f",borderRadius:"20px",width:"88%",maxWidth:"380px",padding:"28px 24px",margin:"auto",marginTop:"auto"},onClick:e=>e.stopPropagation()});
+  box.appendChild(el("div",{style:{fontSize:"32px",textAlign:"center",marginBottom:"12px"}},"⚠️"));
+  box.appendChild(el("p",{style:{color:"#e8eaf0",fontSize:"15px",textAlign:"center",marginBottom:"24px",lineHeight:"1.6"}},msg));
+  const btns=el("div",{style:{display:"flex",gap:"10px"}});
+  btns.appendChild(el("button",{onClick:()=>overlay.remove(),style:{flex:"1",background:"#1a1e2e",border:"1px solid #252840",color:"#7a8296",borderRadius:"12px",padding:"12px",fontSize:"14px",fontWeight:"700",cursor:"pointer",fontFamily:"Cairo,sans-serif"}},"إلغاء"));
+  btns.appendChild(el("button",{onClick:()=>{overlay.remove();onYes();},style:{flex:"1",background:"#ef4444",border:"none",color:"#fff",borderRadius:"12px",padding:"12px",fontSize:"14px",fontWeight:"700",cursor:"pointer",fontFamily:"Cairo,sans-serif"}},"تأكيد الحذف"));
+  box.appendChild(btns);
+  overlay.appendChild(el("div",{style:{display:"flex",alignItems:"center",justifyContent:"center",width:"100%",height:"100%",padding:"24px"}},box));
+  document.body.appendChild(overlay);
+}
+
 function nav(screen){S.screen=screen;render();}
 function render(){const app=document.getElementById("app");app.innerHTML="";const fn={login:pgLogin,main:pgMain,myvehicles:pgMyVehicles,violations:pgViolations,license:pgLicense,handover:pgHandover,maintenance:pgMaintenance,fuel:pgFuel,settings:pgSettings}[S.screen]||pgMain;app.appendChild(fn());}
 
@@ -240,12 +253,14 @@ function buildNotifs(){
   S.vehicles.forEach(v=>{
     const chk=(exp,label)=>{
       if(!exp)return;
-      const diff=daysDiff(new Date(),exp);
-      if(diff>=0)notes.push({icon:"🔴",title:`${label} منتهي`,body:v.plate,color:"#ef4444",tab:"license",priority:true});
-      else{const r=Math.abs(diff);
-        if(r<=3)notes.push({icon:"🔴",title:`${label} — ${r} أيام`,body:v.plate,color:"#ef4444",tab:"license",priority:true});
-        else if(r<=7)notes.push({icon:"🟠",title:`${label} — ${r} أيام`,body:v.plate,color:"#f97316",tab:"license"});
-        else if(r<=14)notes.push({icon:"🟡",title:`${label} — ${r} يوم`,body:v.plate,color:"#eab308",tab:"license"});
+      const nextExp=addOneYear(exp);
+      const diff=daysDiff(new Date(),nextExp);
+      if(diff<=0)notes.push({icon:"🔴",title:`${label} — موعد التجديد انتهى`,body:v.plate,color:"#ef4444",tab:"license",priority:true});
+      else{const r=diff;
+        if(r<=3)notes.push({icon:"🔴",title:`${label} — ${r} أيام للتجديد`,body:v.plate,color:"#ef4444",tab:"license",priority:true});
+        else if(r<=7)notes.push({icon:"🟠",title:`${label} — ${r} أيام للتجديد`,body:v.plate,color:"#f97316",tab:"license"});
+        else if(r<=14)notes.push({icon:"🟡",title:`${label} — ${r} يوم للتجديد`,body:v.plate,color:"#eab308",tab:"license"});
+        else if(r<=30)notes.push({icon:"🟢",title:`${label} — ${r} يوم للتجديد`,body:v.plate,color:"#22c55e",tab:"license"});
       }
     };
     if(v.license_exp)chk(v.license_exp,"الترخيص");
@@ -286,7 +301,7 @@ function pgLogin(){
   const err=el("p",{style:{color:"#ef4444",fontSize:"13px",marginBottom:"12px",textAlign:"center",display:"none"}});
   card.appendChild(err);
   card.appendChild(mkBtn("دخول →",()=>{
-    if(pw===S.savedPw){localStorage.setItem("gm_loggedin","1");nav("main");}
+    if(pw===S.savedPw){localStorage.setItem("gm_loggedin","1");nav("main");setTimeout(sendMorningSummary,1500);}
     else{err.style.display="block";err.textContent="كلمة المرور غير صحيحة ❌";}
   }));
   wrap.appendChild(card);
@@ -343,6 +358,29 @@ function pgMain(){
   return wrap;
 }
 
+function sendMorningSummary(){
+  if(!S.myPhone)return;
+  const today=new Date();
+  const lastSent=localStorage.getItem("gm_lastMorningSent");
+  const todayStr=todayISO();
+  if(lastSent===todayStr)return; // Already sent today
+  const notes=buildNotifs();
+  if(!notes.length){localStorage.setItem("gm_lastMorningSent",todayStr);return;}
+  let msg="🌅 *ملخص صباح "+today.toLocaleDateString("ar-JO")+" — الأثر الذهبي*\n\n";
+  const priority=notes.filter(n=>n.priority);
+  const normal=notes.filter(n=>!n.priority);
+  if(priority.length){msg+="🚨 *تنبيهات عاجلة ("+priority.length+"):*\n";priority.forEach(n=>{msg+=n.icon+" "+n.title+" — "+n.body+"\n";});msg+="\n";}
+  if(normal.length){msg+="⚠️ *تنبيهات عادية ("+normal.length+"):*\n";normal.forEach(n=>{msg+=n.icon+" "+n.title+" — "+n.body+"\n";});msg+="\n";}
+  // Add violations summary
+  const activeViols=S.violations.filter(v=>v.status!=="مسددة");
+  if(activeViols.length){const total=activeViols.reduce((s,v)=>s+(+v.amount||0),0);msg+=`📋 *المخالفات النشطة:* ${activeViols.length} مخالفة | ${total.toFixed(0)} د.أ
+
+`;}
+  msg+=`_تم الإرسال تلقائياً عند فتح التطبيق_`;
+  sendWA(S.myPhone,msg);
+  localStorage.setItem("gm_lastMorningSent",todayStr);
+}
+
 function showNotifs(notes){
   mkModal(`🔔 التنبيهات (${notes.length})`,close=>{
     const wrap=el("div");
@@ -381,13 +419,39 @@ function pgMyVehicles(){
     hc.appendChild(el("div",{style:{color:"#D4AF37",fontSize:"18px",fontWeight:"800",marginBottom:"4px"}},veh.plate));
     hc.appendChild(el("div",{style:{color:"#7a8296",fontSize:"13px"}},[veh.type,veh.make,veh.regNum].filter(Boolean).join(" | ")||"—"));
     detail.appendChild(hc);
-    const licSt=exp=>{if(!exp)return{label:"غير مدخل",color:"#7a8296"};const diff=daysDiff(new Date(),exp);if(diff>=0)return{label:"منتهي",color:"#ef4444"};const r=Math.abs(diff);if(r<=14)return{label:`${r} يوم`,color:r<=3?"#ef4444":"#f97316"};return{label:"ساري",color:"#22c55e"};};
+    // Quick alerts summary
+    const alerts=[];
+    const nextLicExp=veh.license_exp?addOneYear(veh.license_exp):"";
+    const nextInsExp=veh.insurance_exp?addOneYear(veh.insurance_exp):"";
+    if(nextLicExp){const d=daysDiff(new Date(),nextLicExp);if(d<=0)alerts.push({icon:"🔴",text:"ترخيص — انتهى التجديد",color:"#ef4444"});else if(d<=14)alerts.push({icon:"🟠",text:`ترخيص — ${d} يوم للتجديد`,color:"#f97316"});}
+    if(nextInsExp){const d=daysDiff(new Date(),nextInsExp);if(d<=0)alerts.push({icon:"🔴",text:"تأمين — انتهى التجديد",color:"#ef4444"});else if(d<=14)alerts.push({icon:"🟠",text:`تأمين — ${d} يوم للتجديد`,color:"#f97316"});}
+    const vViolAlert=S.violations.filter(v=>v.plate===veh.plate&&v.status!=="مسددة");
+    if(vViolAlert.length>0)alerts.push({icon:"🚨",text:`${vViolAlert.length} مخالفة نشطة`,color:"#ef4444"});
+    const mRecs2=S.maintenance.filter(r=>r.vehicleId===veh.id).sort((a,b)=>a.oilKm-b.oilKm);
+    if(mRecs2.length){const lm2=mRecs2[mRecs2.length-1];const nextOil2=lm2.nextOilKm||(lm2.oilKm+5000);const fRecs2=S.fuel.filter(r=>r.vehicleId===veh.id).sort((a,b)=>b.currKm-a.currKm);if(fRecs2.length){const diff2=nextOil2-fRecs2[0].currKm;if(diff2<=0)alerts.push({icon:"🔴",text:"صيانة — غيار زيت متأخر",color:"#ef4444"});else if(diff2<=500)alerts.push({icon:"🟠",text:`صيانة — ${diff2} كلم للغيار`,color:"#f97316"});}}
+    if(alerts.length>0){
+      const ab=el("div",{style:{display:"flex",flexWrap:"wrap",gap:"6px",marginBottom:"12px"}});
+      alerts.forEach(a=>{const badge=el("div",{style:{background:a.color+"22",border:`1px solid ${a.color}44`,borderRadius:"8px",padding:"4px 10px",display:"flex",alignItems:"center",gap:"4px"}});badge.appendChild(el("span",{style:{fontSize:"12px"}},a.icon));badge.appendChild(el("span",{style:{color:a.color,fontSize:"11px",fontWeight:"700"}},a.text));ab.appendChild(badge);});
+      detail.appendChild(ab);
+    }
+    const licSt=exp=>{if(!exp)return{label:"غير مدخل",color:"#7a8296"};const nextExp=addOneYear(exp);const diff=daysDiff(new Date(),nextExp);if(diff<=0)return{label:"انتهى موعد التجديد",color:"#ef4444"};if(diff<=3)return{label:`${diff} أيام للتجديد`,color:"#ef4444"};if(diff<=7)return{label:`${diff} أيام للتجديد`,color:"#f97316"};if(diff<=14)return{label:`${diff} يوم للتجديد`,color:"#eab308"};return{label:"ساري",color:"#22c55e"};};
     const mkSec=(title,color,rows)=>{
       const sc=el("div",{style:{background:"#12151f",borderRadius:"16px",padding:"14px 16px",marginBottom:"12px",borderRight:`4px solid ${color}`}});
       sc.appendChild(el("div",{style:{color:"#e8eaf0",fontWeight:"700",fontSize:"15px",marginBottom:"10px"}},title));
       rows.forEach(([lbl,val,c])=>{const row=el("div",{style:{display:"flex",justifyContent:"space-between",padding:"9px 0",borderBottom:"1px solid #252840"}});row.appendChild(el("span",{style:{color:"#7a8296",fontSize:"13px"}},lbl));row.appendChild(el("span",{style:{color:c||"#e8eaf0",fontSize:"13px",fontWeight:"600"}},val));sc.appendChild(row);});
       return sc;
     };
+    // Current equipment section
+    const ceq=veh.currentEquip||"";
+    const ceqSec=el("div",{style:{background:"#12151f",borderRadius:"16px",padding:"14px 16px",marginBottom:"12px",borderRight:"4px solid #D4AF37"}});
+    ceqSec.appendChild(el("div",{style:{color:"#e8eaf0",fontWeight:"700",fontSize:"15px",marginBottom:"10px"}},"🔩 عدة المركبة الحالية"));
+    const ceqRow=el("div",{style:{display:"flex",alignItems:"center",gap:"8px"}});
+    const ceqInp=el("input",{type:"text",placeholder:"اكتب العدة الموجودة في المركبة...",value:ceq,style:{flex:"1",background:"#1a1e2e",border:"1px solid #252840",borderRadius:"8px",padding:"8px 12px",color:"#e8eaf0",fontSize:"13px",outline:"none"}});
+    const ceqSave=el("button",{style:{background:"#D4AF37",border:"none",color:"#000",borderRadius:"8px",padding:"8px 14px",cursor:"pointer",fontFamily:"Cairo,sans-serif",fontWeight:"700",fontSize:"12px",whiteSpace:"nowrap"}},"حفظ");
+    ceqSave.addEventListener("click",()=>{save("vehicles",S.vehicles.map(x=>x.id===veh.id?{...x,currentEquip:ceqInp.value}:x));ceqSave.textContent="✅ محفوظ";setTimeout(()=>ceqSave.textContent="حفظ",1500);});
+    ceqRow.appendChild(ceqInp);ceqRow.appendChild(ceqSave);ceqSec.appendChild(ceqRow);
+    detail.appendChild(ceqSec);
+
     const vViol=S.violations.filter(v=>v.plate===veh.plate&&v.status!=="مسددة");
     const vs=mkSec("🚨 المخالفات","#ef4444",[]);
     const vr=el("div",{style:{display:"flex",gap:"8px"}});
@@ -636,7 +700,7 @@ function pgLicense(){
   let search="",selVeh="";
   const content=el("div");wrap.appendChild(content);
 
-  const statusOf=exp=>{if(!exp)return{label:"غير مدخل",color:"#7a8296"};const diff=daysDiff(new Date(),exp);if(diff>=0)return{label:"منتهي",color:"#ef4444"};const r=Math.abs(diff);if(r<=3)return{label:`${r} أيام — شديد`,color:"#ef4444"};if(r<=7)return{label:`${r} أيام — عالي`,color:"#f97316"};if(r<=14)return{label:`${r} يوم — تنبيه`,color:"#eab308"};return{label:"ساري",color:"#22c55e"};};
+  const statusOf=exp=>{if(!exp)return{label:"غير مدخل",color:"#7a8296"};const nextExp=addOneYear(exp);const diff=daysDiff(new Date(),nextExp);if(diff<=0)return{label:"انتهى التجديد",color:"#ef4444"};if(diff<=3)return{label:`${diff} أيام — شديد`,color:"#ef4444"};if(diff<=7)return{label:`${diff} أيام — عالي`,color:"#f97316"};if(diff<=14)return{label:`${diff} يوم — تنبيه`,color:"#eab308"};return{label:"ساري",color:"#22c55e"};};
   const worstColor=v=>{const order=["#ef4444","#f97316","#eab308","#22c55e","#7a8296"];const ls=statusOf(v.license_exp),is=statusOf(v.insurance_exp);return order.indexOf(ls.color)<order.indexOf(is.color)?ls.color:is.color;};
 
   function redraw(){
@@ -810,6 +874,13 @@ function showHandoverForm(vehicleId,onDone){
     wrap.appendChild(db2);
     const{wrap:tw}=mkSelect("الحالة","استلام",v=>form.type=v,["استلام","تسليم"],true);wrap.appendChild(tw);
     const{wrap:dw,inp:di}=mkField("اسم السائق","",v=>form.driver=v,"text","","true");wrap.appendChild(dw);
+    // Current equipment from vehicle
+    if(veh?.currentEquip){
+      const ceqBox=el("div",{style:{background:"rgba(212,175,55,0.1)",borderRadius:"10px",padding:"10px 14px",marginBottom:"14px",border:"1px solid rgba(212,175,55,0.3)"}});
+      ceqBox.appendChild(el("div",{style:{color:"#7a8296",fontSize:"11px",marginBottom:"4px"}},"عدة المركبة المسجلة:"));
+      ceqBox.appendChild(el("div",{style:{color:"#D4AF37",fontSize:"13px",fontWeight:"600"}},veh.currentEquip));
+      wrap.appendChild(ceqBox);
+    }
     // Equipment
     wrap.appendChild(el("label",{className:"field-label"},"عدة المركبة"));
     const eqBox=el("div",{style:{background:"#1a1e2e",borderRadius:"12px",padding:"12px 14px",marginBottom:"14px"}});
@@ -843,11 +914,20 @@ function showHandoverForm(vehicleId,onDone){
     sigWrap.appendChild(sigBtn);wrap.appendChild(sigWrap);
     wrap.appendChild(mkBtn("✓ حفظ الإجراء وإرسال السند",()=>{
       if(!form.driver||!form.type)return;
-      const rec={id:uid(),vehicleId,type:form.type,driver:form.driver,date:new Date().toISOString(),equip:{...form.equip},photos:{...photos},signature:form.signature};
-      const filtered=S.handovers.filter(h=>!(h.vehicleId===vehicleId&&daysDiff(h.date)>30));
-      save("handovers",[...filtered,rec]);
+      const equipped=Object.entries(form.equip).filter(([,v])=>v).map(([k])=>k);
+      const rec={id:uid(),vehicleId,type:form.type,driver:form.driver,date:new Date().toISOString(),equip:{...form.equip},photos:{...photos},signature:form.signature,archived:false};
+      // Archive logic: if new action is استلام and last was تسليم, archive last تسليم
+      const existingHandovers=S.handovers.filter(h=>h.vehicleId===vehicleId);
+      const last=existingHandovers.sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
+      let updatedHandovers=[...S.handovers];
+      if(form.type==="استلام"&&last&&last.type==="تسليم"&&!last.archived){
+        updatedHandovers=updatedHandovers.map(h=>h.id===last.id?{...h,archived:true,archivedAt:new Date().toISOString()}:h);
+      }
+      // Remove records older than 1 year from archive
+      const oneYearAgo=new Date();oneYearAgo.setFullYear(oneYearAgo.getFullYear()-1);
+      updatedHandovers=updatedHandovers.filter(h=>!(h.archived&&new Date(h.archivedAt||h.date)<oneYearAgo));
+      save("handovers",[...updatedHandovers,rec]);
       if(S.myPhone){
-        const equipped=Object.entries(form.equip).filter(([,v])=>v).map(([k])=>k);
         let msg=`🔑 *سند ${form.type} — الأثر الذهبي*\n\n🚗 المركبة: ${veh?.plate}\n👤 السائق: ${form.driver}\n📅 ${now.toLocaleDateString("ar-JO")} ${fmt12(now)}\n`;
         if(equipped.length)msg+=`✓ العدة: ${equipped.join("، ")}\n`;
         sendWA(S.myPhone,msg);
@@ -858,25 +938,45 @@ function showHandoverForm(vehicleId,onDone){
   });
 }
 
+function mkHandoverCard(rec){
+  const hc=rec.type==="استلام"?"#3b82f6":"#22c55e";
+  const card=el("div",{style:{background:rec.archived?"#0f1118":"#1a1e2e",borderRadius:"14px",padding:"12px 14px",marginBottom:"12px",borderRight:`3px solid ${rec.archived?"#7a8296":hc}`,opacity:rec.archived?"0.8":"1"}});
+  const tr=el("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:"6px"}});
+  const badges=el("div",{style:{display:"flex",gap:"6px",alignItems:"center"}});
+  badges.appendChild(mkBadge(rec.type,rec.archived?"#7a8296":hc));
+  if(rec.archived)badges.appendChild(mkBadge("أرشيف","#7a8296"));
+  tr.appendChild(badges);
+  tr.appendChild(el("span",{style:{color:"#7a8296",fontSize:"12px"}},`${toDateStr(rec.date)} ${fmt12(rec.date)}`));
+  card.appendChild(tr);
+  card.appendChild(el("div",{style:{color:"#e8eaf0",marginTop:"8px",fontWeight:"600"}},`👤 ${rec.driver}`));
+  const eq=Object.entries(rec.equip||{}).filter(([,v])=>v).map(([k])=>k);
+  if(eq.length)card.appendChild(el("div",{style:{color:"#7a8296",fontSize:"12px",marginTop:"6px"}},`✓ ${eq.join("، ")}`));
+  if(rec.signature)card.appendChild(el("img",{src:rec.signature,style:{width:"100%",maxHeight:"80px",objectFit:"contain",borderRadius:"8px",marginTop:"8px"}}));
+  const photos=Object.entries(rec.photos||{}).filter(([,v])=>v);
+  if(photos.length){const pg=el("div",{style:{display:"flex",gap:"6px",marginTop:"8px",flexWrap:"wrap"}});photos.forEach(([,src])=>pg.appendChild(el("img",{src,style:{width:"52px",height:"52px",objectFit:"cover",borderRadius:"8px"}})));card.appendChild(pg);}
+  return card;
+}
+
 function showHandoverHistory(veh){
   mkModal(`سجل — ${veh.plate}`,close=>{
     const wrap=el("div");
-    const records=S.handovers.filter(h=>h.vehicleId===veh.id).sort((a,b)=>new Date(b.date)-new Date(a.date));
-    if(!records.length){wrap.appendChild(el("div",{style:{textAlign:"center",color:"#7a8296",padding:"24px"}},"لا يوجد سجل بعد"));return wrap;}
-    records.forEach(rec=>{
-      const hc=rec.type==="استلام"?"#3b82f6":"#22c55e";
-      const card=el("div",{style:{background:"#1a1e2e",borderRadius:"14px",padding:"12px 14px",marginBottom:"12px",borderRight:`3px solid ${hc}`}});
-      const tr=el("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center"}});
-      tr.appendChild(mkBadge(rec.type,hc));tr.appendChild(el("span",{style:{color:"#7a8296",fontSize:"12px"}},`${toDateStr(rec.date)} ${fmt12(rec.date)}`));
-      card.appendChild(tr);
-      card.appendChild(el("div",{style:{color:"#e8eaf0",marginTop:"8px",fontWeight:"600"}},`👤 ${rec.driver}`));
-      const eq=Object.entries(rec.equip||{}).filter(([,v])=>v).map(([k])=>k);
-      if(eq.length)card.appendChild(el("div",{style:{color:"#7a8296",fontSize:"12px",marginTop:"6px"}},`✓ ${eq.join("، ")}`));
-      if(rec.signature)card.appendChild(el("img",{src:rec.signature,style:{width:"100%",maxHeight:"80px",objectFit:"contain",borderRadius:"8px",marginTop:"8px"}}));
-      const photos=Object.entries(rec.photos||{}).filter(([,v])=>v);
-      if(photos.length){const pg=el("div",{style:{display:"flex",gap:"6px",marginTop:"8px",flexWrap:"wrap"}});photos.forEach(([,src])=>pg.appendChild(el("img",{src,style:{width:"52px",height:"52px",objectFit:"cover",borderRadius:"8px"}})));card.appendChild(pg);}
-      wrap.appendChild(card);
-    });
+    const allRecords=S.handovers.filter(h=>h.vehicleId===veh.id).sort((a,b)=>new Date(b.date)-new Date(a.date));
+    const active=allRecords.filter(h=>!h.archived);
+    const archived=allRecords.filter(h=>h.archived);
+    if(!allRecords.length){wrap.appendChild(el("div",{style:{textAlign:"center",color:"#7a8296",padding:"24px"}},"لا يوجد سجل بعد"));return wrap;}
+    // Active records
+    if(active.length){
+      wrap.appendChild(el("div",{style:{color:"#e8eaf0",fontWeight:"700",fontSize:"14px",marginBottom:"10px"}},"📋 السجل النشط"));
+      active.forEach(rec=>wrap.appendChild(mkHandoverCard(rec)));
+    }
+    // Archived records
+    if(archived.length){
+      const archBtn=el("button",{style:{width:"100%",background:"#1a1e2e",border:"1px solid #252840",borderRadius:"10px",padding:"10px 14px",color:"#7a8296",cursor:"pointer",fontFamily:"Cairo,sans-serif",fontSize:"13px",marginTop:"10px",marginBottom:"8px"}},"📦 الأرشيف ("+archived.length+")");
+      const archDiv=el("div",{style:{display:"none"}});
+      archBtn.addEventListener("click",()=>{archDiv.style.display=archDiv.style.display==="none"?"block":"none";archBtn.textContent=archDiv.style.display==="block"?"▲ إخفاء الأرشيف":"📦 الأرشيف ("+archived.length+")";});
+      archived.forEach(rec=>archDiv.appendChild(mkHandoverCard(rec)));
+      wrap.appendChild(archBtn);wrap.appendChild(archDiv);
+    }
     return wrap;
   });
 }
@@ -1130,6 +1230,69 @@ function showAddFuel(vehicleId,onDone){
 // ════════════════════════════════════════════════════
 // SETTINGS
 // ════════════════════════════════════════════════════
+function exportMonthlyReport(){
+  const now=new Date();
+  const prevMonth=new Date(now.getFullYear(),now.getMonth()-1,1);
+  const prevMonthEnd=new Date(now.getFullYear(),now.getMonth(),0);
+  const monthName=prevMonth.toLocaleDateString("ar-JO",{month:"long",year:"numeric"});
+  const isInMonth=dateStr=>{if(!dateStr)return false;const d=new Date(dateStr);return d>=prevMonth&&d<=prevMonthEnd;};
+
+  const wb=XLSX.utils.book_new();
+
+  // Sheet 1: Summary
+  const summaryRows=[["رقم اللوحة","نوع المركبة","عدد المخالفات","قيمة المخالفات (د.أ)","إنفاق المحروقات (د.أ)","عمليات الصيانة","آخر حركة"]];
+  S.vehicles.forEach(v=>{
+    const viols=S.violations.filter(x=>x.plate===v.plate&&isInMonth(x.vdate));
+    const violAmt=viols.reduce((s,x)=>s+(+x.amount||0),0);
+    const fuel=S.fuel.filter(x=>x.vehicleId===v.id&&isInMonth(x.date));
+    const fuelAmt=fuel.reduce((s,x)=>s+(x.amount||0),0);
+    const maint=S.maintenance.filter(x=>x.vehicleId===v.id&&isInMonth(x.date));
+    const lastH=S.handovers.filter(x=>x.vehicleId===v.id).sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
+    summaryRows.push([v.plate,v.type||"—",viols.length,violAmt.toFixed(2),fuelAmt.toFixed(2),maint.length,lastH?toDateStr(lastH.date):"—"]);
+  });
+  const wsSummary=XLSX.utils.aoa_to_sheet(summaryRows);
+  wsSummary["!cols"]=[{wch:14},{wch:16},{wch:14},{wch:18},{wch:18},{wch:14},{wch:16}];
+  XLSX.utils.book_append_sheet(wb,wsSummary,"ملخص عام");
+
+  // Sheet per vehicle
+  S.vehicles.forEach(v=>{
+    const rows=[];
+    // Violations
+    rows.push(["=== المخالفات ===","","","","",""]);
+    rows.push(["التاريخ","السائق","النوع","المبلغ","الحالة","رقم المخالفة"]);
+    const viols=S.violations.filter(x=>x.plate===v.plate&&isInMonth(x.vdate));
+    if(viols.length)viols.forEach(x=>rows.push([toDateStr(x.vdate),x.driver,x.vtype,x.amount,x.status,x.vnum||"—"]));
+    else rows.push(["لا توجد مخالفات","","","","",""]);
+    rows.push([]);
+    // Fuel
+    rows.push(["=== المحروقات ===","","","","",""]);
+    rows.push(["التاريخ","العداد السابق","العداد الحالي","المسافة","المبلغ","تكلفة الكلم"]);
+    const fuel=S.fuel.filter(x=>x.vehicleId===v.id&&isInMonth(x.date));
+    if(fuel.length)fuel.forEach(x=>rows.push([toDateStr(x.date),x.prevKm,x.currKm,x.dist,x.amount,x.costPerKm]));
+    else rows.push(["لا توجد سجلات","","","","",""]);
+    rows.push([]);
+    // Maintenance
+    rows.push(["=== الصيانة ===","","","","",""]);
+    rows.push(["التاريخ","العداد","الغيار القادم","فلتر زيت","فلتر ديزل","بريكات"]);
+    const maint=S.maintenance.filter(x=>x.vehicleId===v.id&&isInMonth(x.date));
+    if(maint.length)maint.forEach(x=>rows.push([toDateStr(x.date),x.oilKm,x.nextOilKm,`${x.filterOil||0}/2`,`${x.filterDiesel||0}/3`,`${x.brakes||0}/3`]));
+    else rows.push(["لا توجد سجلات","","","","",""]);
+    rows.push([]);
+    // Handover
+    rows.push(["=== الاستلام والتسليم ===","","","","",""]);
+    rows.push(["التاريخ","النوع","السائق","","",""]);
+    const handovers=S.handovers.filter(x=>x.vehicleId===v.id&&isInMonth(x.date));
+    if(handovers.length)handovers.forEach(x=>rows.push([toDateStr(x.date),x.type,x.driver,"","",""]));
+    else rows.push(["لا توجد سجلات","","","","",""]);
+    const ws=XLSX.utils.aoa_to_sheet(rows);
+    ws["!cols"]=[{wch:14},{wch:14},{wch:16},{wch:12},{wch:12},{wch:14}];
+    const sheetName=v.plate.replace(/[/*?:[\]\\]/g,"-").slice(0,31);
+    XLSX.utils.book_append_sheet(wb,ws,sheetName);
+  });
+
+  XLSX.writeFile(wb,`تقرير_${monthName}.xlsx`);
+}
+
 function pgSettings(){
   const wrap=el("div",{style:{minHeight:"100vh",background:"#0a0c14",paddingBottom:"40px"}});
   wrap.appendChild(mkHeader("⚙️ الإعدادات",()=>nav("main")));
@@ -1172,7 +1335,7 @@ function pgSettings(){
         const eb=el("button",{style:{background:"rgba(59,130,246,0.13)",border:"none",color:"#3b82f6",borderRadius:"8px",padding:"5px 12px",cursor:"pointer",fontFamily:"Cairo,sans-serif",fontSize:"12px"}},"تعديل");
         eb.addEventListener("click",()=>showEditVeh(v,refresh));
         const db=el("button",{style:{background:"rgba(239,68,68,0.13)",border:"none",color:"#ef4444",borderRadius:"8px",padding:"5px 12px",cursor:"pointer",fontFamily:"Cairo,sans-serif",fontSize:"12px"}},"حذف");
-        db.addEventListener("click",()=>{save("vehicles",S.vehicles.filter(x=>x.id!==v.id));refresh();});
+        db.addEventListener("click",()=>mkConfirm(`هل تريد حذف المركبة ${v.plate}؟`,()=>{save("vehicles",S.vehicles.filter(x=>x.id!==v.id));refresh();}));
         btns.appendChild(eb);btns.appendChild(db);row.appendChild(info);row.appendChild(btns);w.appendChild(row);
       });
       const il=el("label",{style:{display:"block",background:"#1a1e2e",borderRadius:"14px",padding:"22px 16px",textAlign:"center",cursor:"pointer",border:"2px dashed rgba(212,175,55,0.27)",marginTop:"12px"}});
@@ -1184,12 +1347,16 @@ function pgSettings(){
   }));
 
   content.appendChild(mkSec("notes",`📝 ملاحظات المخالفات (${S.noteOptions.length})`,w=>{
-    function refresh(){w.innerHTML="";S.noteOptions.forEach((n,i)=>{const row=el("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",background:"#1a1e2e",borderRadius:"8px",padding:"10px 12px",marginBottom:"8px"}});row.appendChild(el("span",{style:{color:"#e8eaf0",fontSize:"13px"}},n));const d=el("button",{style:{background:"rgba(239,68,68,0.13)",border:"none",color:"#ef4444",borderRadius:"6px",padding:"4px 10px",cursor:"pointer",fontFamily:"Cairo,sans-serif",fontSize:"12px"}},"حذف");d.addEventListener("click",()=>{save("noteOptions",S.noteOptions.filter((_,j)=>j!==i));refresh();});row.appendChild(d);w.appendChild(row);});const ar=el("div",{style:{display:"flex",gap:"8px",marginTop:"10px"}});const inp=el("input",{type:"text",placeholder:"ملاحظة جديدة",style:{flex:"1"}});const ab=el("button",{style:{background:"#D4AF37",border:"none",color:"#000",borderRadius:"8px",padding:"9px 18px",cursor:"pointer",fontFamily:"Cairo,sans-serif",fontWeight:"700",fontSize:"16px"}},"+");ab.addEventListener("click",()=>{if(inp.value){save("noteOptions",[...S.noteOptions,inp.value]);inp.value="";refresh();}});ar.appendChild(inp);ar.appendChild(ab);w.appendChild(ar);}refresh();
+    function refresh(){w.innerHTML="";S.noteOptions.forEach((n,i)=>{const row=el("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",background:"#1a1e2e",borderRadius:"8px",padding:"10px 12px",marginBottom:"8px"}});row.appendChild(el("span",{style:{color:"#e8eaf0",fontSize:"13px"}},n));const d=el("button",{style:{background:"rgba(239,68,68,0.13)",border:"none",color:"#ef4444",borderRadius:"6px",padding:"4px 10px",cursor:"pointer",fontFamily:"Cairo,sans-serif",fontSize:"12px"}},"حذف");d.addEventListener("click",()=>mkConfirm("هل تريد حذف هذه الملاحظة؟",()=>{save("noteOptions",S.noteOptions.filter((_,j)=>j!==i));refresh();}));row.appendChild(d);w.appendChild(row);});const ar=el("div",{style:{display:"flex",gap:"8px",marginTop:"10px"}});const inp=el("input",{type:"text",placeholder:"ملاحظة جديدة",style:{flex:"1"}});const ab=el("button",{style:{background:"#D4AF37",border:"none",color:"#000",borderRadius:"8px",padding:"9px 18px",cursor:"pointer",fontFamily:"Cairo,sans-serif",fontWeight:"700",fontSize:"16px"}},"+");ab.addEventListener("click",()=>{if(inp.value){save("noteOptions",[...S.noteOptions,inp.value]);inp.value="";refresh();}});ar.appendChild(inp);ar.appendChild(ab);w.appendChild(ar);}refresh();
   }));
 
   content.appendChild(mkSec("equip",`🔩 عدة المركبة (${S.equipList.length})`,w=>{
-    function refresh(){w.innerHTML="";S.equipList.forEach((e,i)=>{const row=el("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",background:"#1a1e2e",borderRadius:"8px",padding:"10px 12px",marginBottom:"8px"}});row.appendChild(el("span",{style:{color:"#e8eaf0",fontSize:"13px"}},e));const d=el("button",{style:{background:"rgba(239,68,68,0.13)",border:"none",color:"#ef4444",borderRadius:"6px",padding:"4px 10px",cursor:"pointer",fontFamily:"Cairo,sans-serif",fontSize:"12px"}},"حذف");d.addEventListener("click",()=>{save("equipList",S.equipList.filter((_,j)=>j!==i));refresh();});row.appendChild(d);w.appendChild(row);});const ar=el("div",{style:{display:"flex",gap:"8px",marginTop:"10px"}});const inp=el("input",{type:"text",placeholder:"عنصر جديد",style:{flex:"1"}});const ab=el("button",{style:{background:"#D4AF37",border:"none",color:"#000",borderRadius:"8px",padding:"9px 18px",cursor:"pointer",fontFamily:"Cairo,sans-serif",fontWeight:"700",fontSize:"16px"}},"+");ab.addEventListener("click",()=>{if(inp.value){save("equipList",[...S.equipList,inp.value]);inp.value="";refresh();}});ar.appendChild(inp);ar.appendChild(ab);w.appendChild(ar);}refresh();
+    function refresh(){w.innerHTML="";S.equipList.forEach((e,i)=>{const row=el("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",background:"#1a1e2e",borderRadius:"8px",padding:"10px 12px",marginBottom:"8px"}});row.appendChild(el("span",{style:{color:"#e8eaf0",fontSize:"13px"}},e));const d=el("button",{style:{background:"rgba(239,68,68,0.13)",border:"none",color:"#ef4444",borderRadius:"6px",padding:"4px 10px",cursor:"pointer",fontFamily:"Cairo,sans-serif",fontSize:"12px"}},"حذف");d.addEventListener("click",()=>mkConfirm("هل تريد حذف هذا العنصر؟",()=>{save("equipList",S.equipList.filter((_,j)=>j!==i));refresh();}));row.appendChild(d);w.appendChild(row);});const ar=el("div",{style:{display:"flex",gap:"8px",marginTop:"10px"}});const inp=el("input",{type:"text",placeholder:"عنصر جديد",style:{flex:"1"}});const ab=el("button",{style:{background:"#D4AF37",border:"none",color:"#000",borderRadius:"8px",padding:"9px 18px",cursor:"pointer",fontFamily:"Cairo,sans-serif",fontWeight:"700",fontSize:"16px"}},"+");ab.addEventListener("click",()=>{if(inp.value){save("equipList",[...S.equipList,inp.value]);inp.value="";refresh();}});ar.appendChild(inp);ar.appendChild(ab);w.appendChild(ar);}refresh();
   }));
+
+  // Monthly report button
+  const repBtn=mkBtn("📊 تصدير التقرير الشهري",()=>exportMonthlyReport(),{background:"#22c55e",marginBottom:"12px"});
+  content.appendChild(repBtn);
 
   const logout=el("button",{style:{width:"100%",background:"rgba(239,68,68,0.13)",border:"1px solid rgba(239,68,68,0.27)",borderRadius:"14px",padding:"14px",color:"#ef4444",fontFamily:"Cairo,sans-serif",fontSize:"15px",fontWeight:"700",cursor:"pointer",marginTop:"8px"}},"🚪 تسجيل الخروج");
   logout.addEventListener("click",()=>{localStorage.removeItem("gm_loggedin");nav("login");});
