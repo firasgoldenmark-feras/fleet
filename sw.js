@@ -1,4 +1,4 @@
-const CACHE = "fleet-v5";
+const CACHE = "fleet-v6";
 const ASSETS = ["/fleet/", "/fleet/index.html"];
 
 self.addEventListener("install", e => {
