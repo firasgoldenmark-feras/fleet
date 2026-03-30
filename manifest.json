@@ -1,9 +1,8 @@
 {
-  "name": "أسطول مركبات شركة الأثر الذهبي",
+  "name": "أسطول مركبات الأثر الذهبي",
   "short_name": "أسطول الأثر الذهبي",
-  "description": "نظام إدارة أسطول مركبات شركة الأثر الذهبي للاستيراد والتصدير",
-  "start_url": "/fleet/",
-  "scope": "/fleet/",
+  "description": "نظام إدارة أسطول مركبات الأثر الذهبي للاستيراد والتصدير",
+  "start_url": ".",
   "display": "standalone",
   "background_color": "#0a0c14",
   "theme_color": "#D4AF37",
@@ -11,7 +10,7 @@
   "lang": "ar",
   "dir": "rtl",
   "icons": [
-    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
-    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
   ]
 }
