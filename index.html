@@ -1437,6 +1437,13 @@ async function initApp(){
   render();
 }
 initApp();
+
+// Register Service Worker for PWA
+if("serviceWorker" in navigator){
+  navigator.serviceWorker.register("/fleet/sw.js")
+    .then(()=>console.log("SW registered"))
+    .catch(e=>console.log("SW error",e));
+}
 </script>
 </body>
 </html>
