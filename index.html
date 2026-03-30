@@ -9,6 +9,17 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <title>أسطول الأثر الذهبي</title>
 <link rel="manifest" href="manifest.json"/>
+<link rel="apple-touch-icon" href="icon-192.png"/>
+<meta name="apple-mobile-web-app-title" content="أسطول الأثر"/>
+<style>
+#pwa-install-btn{
+  position:fixed;bottom:80px;left:50%;transform:translateX(-50%);
+  background:#D4AF37;color:#000;border:none;border-radius:14px;
+  padding:12px 28px;font-family:'Cairo',sans-serif;font-size:14px;
+  font-weight:700;cursor:pointer;z-index:9999;box-shadow:0 4px 20px rgba(212,175,55,0.5);
+  display:flex;align-items:center;gap:8px;white-space:nowrap;
+}
+</style>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
@@ -1438,11 +1449,46 @@ async function initApp(){
 }
 initApp();
 
-// Register Service Worker for PWA
+// ═══ PWA Install Prompt ═══
+let _deferredPrompt = null;
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  _deferredPrompt = e;
+  let btn = document.getElementById("pwa-install-btn");
+  if(!btn){
+    btn = document.createElement("button");
+    btn.id = "pwa-install-btn";
+    btn.innerHTML = "⬇️ تثبيت التطبيق";
+    btn.addEventListener("click", async () => {
+      if(!_deferredPrompt) return;
+      _deferredPrompt.prompt();
+      const { outcome } = await _deferredPrompt.userChoice;
+      if(outcome === "accepted") btn.remove();
+      _deferredPrompt = null;
+    });
+    document.body.appendChild(btn);
+  }
+  btn.style.display = "flex";
+});
+window.addEventListener("appinstalled", () => {
+  const btn = document.getElementById("pwa-install-btn");
+  if(btn) btn.remove();
+  _deferredPrompt = null;
+});
+
+// ═══ Inline Service Worker ═══
 if("serviceWorker" in navigator){
-  navigator.serviceWorker.register("/fleet/sw.js")
-    .then(()=>console.log("SW registered"))
-    .catch(e=>console.log("SW error",e));
+  const swCode = `
+self.addEventListener("install", e => { self.skipWaiting(); });
+self.addEventListener("activate", e => { e.waitUntil(clients.claim()); });
+self.addEventListener("fetch", e => {
+  e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
+});`;
+  const blob = new Blob([swCode], {type:"application/javascript"});
+  const swUrl = URL.createObjectURL(blob);
+  navigator.serviceWorker.register(swUrl, {scope:"/"})
+    .then(r => console.log("SW OK", r.scope))
+    .catch(e => console.log("SW error", e));
 }
 </script>
 </body>
