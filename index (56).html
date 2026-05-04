@@ -1,0 +1,3053 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
+<meta name="theme-color" content="#D4AF37"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="أسطول الأثر الذهبي"/>
+<title>أسطول مركبات شركة الأثر الذهبي</title>
+<link rel="manifest" href="manifest.json"/>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+body{margin:0;padding:0;background:#0a0c14;font-family:'Cairo',sans-serif;overscroll-behavior:none;}
+#root{min-height:100vh;}
+input,select,button,textarea{font-family:'Cairo',sans-serif;}
+::-webkit-scrollbar{width:4px;}
+::-webkit-scrollbar-track{background:#12151f;}
+::-webkit-scrollbar-thumb{background:#D4AF37;border-radius:2px;}
+canvas{touch-action:none;}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script type="text/babel">
+const {useState,useEffect,useRef,useCallback}=React;
+
+// ══════════════════════════════════════════════════
+// THEME & CONSTANTS
+// ══════════════════════════════════════════════════
+const T = {
+  bg:"#0D0D0F", card:"#141417", card2:"#1A1A1F", card3:"#202026",
+  gold:"#F5C542", goldDeep:"#C89B2A", goldGlow:"rgba(245,197,66,0.12)",
+  red:"#EF4444",   redSoft:"rgba(239,68,68,0.12)",
+  orange:"#FB923C", orangeSoft:"rgba(251,146,60,0.12)",
+  yellow:"#EAB308", yellowSoft:"rgba(234,179,8,0.12)",
+  green:"#22C55E",  greenSoft:"rgba(34,197,94,0.12)",
+  blue:"#60A5FA",   blueSoft:"rgba(96,165,250,0.12)",
+  text:"#F0F0F5", sub:"#6B6B80", sub2:"#9090A8",
+  border:"rgba(255,255,255,0.07)", border2:"rgba(255,255,255,0.12)",
+  shadow:"0 2px 8px rgba(0,0,0,0.35)", shadowMd:"0 4px 20px rgba(0,0,0,0.45)"
+};
+const GF = { fontFamily:"'Cairo', sans-serif" };
+
+// ═══ SUPABASE CONFIG ═══
+const SUPA_URL="https://rxvmdobbfnthsuqhojxk.supabase.co";
+const SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ4dm1kb2JiZm50aHN1cWhvanhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1ODg5MDcsImV4cCI6MjA4OTE2NDkwN30.dAA3rnL423rQq4xqn7xwaYs6ih3D2qufjFhDyjkXXSc";
+const sb=supabase.createClient(SUPA_URL,SUPA_KEY);
+
+function showToast(msg,color="#22c55e"){
+  let el=document.getElementById("sv-toast");
+  if(!el){el=document.createElement("div");el.id="sv-toast";
+    el.style.cssText="position:fixed;bottom:80px;left:50%;transform:translateX(-50%);padding:8px 20px;border-radius:20px;font-family:'Cairo',sans-serif;font-size:14px;font-weight:700;z-index:9999;transition:opacity 0.4s;pointer-events:none;";
+    document.body.appendChild(el);}
+  el.textContent=msg;el.style.background=color;el.style.color="#000";el.style.opacity="1";
+  clearTimeout(el._t);el._t=setTimeout(()=>el.style.opacity="0",2000);
+}
+
+// Supabase data layer
+const DB={
+  async getVehicles(){const{data}=await sb.from("fleet_vehicles").select("*");return(data||[]).map(r=>({id:r.id,plate:r.plate,regNum:r.reg_num||"",type:r.type||"",make:r.make||"",fuelType:r.fuel_type||"",license_exp:r.license_exp,insurance_exp:r.insurance_exp,renewHistory:r.renew_history||[]}));},
+  async saveVehicle(v){await sb.from("fleet_vehicles").upsert({id:v.id,plate:v.plate,reg_num:v.regNum||"",type:v.type||"",make:v.make||"",fuel_type:v.fuelType||"",license_exp:v.license_exp||null,insurance_exp:v.insurance_exp||null,renew_history:v.renewHistory||[]});showToast("✅ تم الحفظ");},
+  async deleteVehicle(id){await sb.from("fleet_vehicles").delete().eq("id",id);showToast("✅ تم الحذف");},
+  async getViolations(){const{data}=await sb.from("fleet_violations").select("*");return(data||[]).map(r=>({id:r.id,plate:r.plate,driver:r.driver,vdate:r.vdate,vtype:r.vtype,vnum:r.vnum||"",amount:r.amount,note:r.note||"",status:r.status,created:r.created_at,sentDate:r.sent_date,paidDate:r.paid_date}));},
+  async saveViolation(v){await sb.from("fleet_violations").upsert({id:v.id,plate:v.plate,driver:v.driver,vdate:v.vdate,vtype:v.vtype,vnum:v.vnum||"",amount:+v.amount||0,note:v.note||"",status:v.status||"مفتوحة",sent_date:v.sentDate||null,paid_date:v.paidDate||null});showToast("✅ تم الحفظ");},
+  async getHandovers(){const{data}=await sb.from("fleet_handovers").select("*");return(data||[]).map(r=>({id:r.id,vehicleId:r.vehicle_id,type:r.type,driver:r.driver,date:r.date,equip:r.equip||{},photos:r.photos||{},signature:r.signature||""}));},
+  async saveHandover(h){await sb.from("fleet_handovers").upsert({id:h.id,vehicle_id:h.vehicleId,type:h.type,driver:h.driver,date:h.date,equip:h.equip||{},photos:h.photos||{},signature:h.signature||""});showToast("✅ تم الحفظ");},
+  async getMaintenance(){const{data}=await sb.from("fleet_maintenance").select("*");return(data||[]).map(r=>({id:r.id,vehicleId:r.vehicle_id,oilKm:r.oil_km,nextOilKm:r.next_oil_km,date:r.date,filterOil:r.filter_oil,filterDiesel:r.filter_diesel,filterAir:r.filter_air,brakes:r.brakes}));},
+  async saveMaintenance(m){await sb.from("fleet_maintenance").upsert({id:m.id,vehicle_id:m.vehicleId,oil_km:m.oilKm,next_oil_km:m.nextOilKm,date:m.date,filter_oil:m.filterOil,filter_diesel:m.filterDiesel,filter_air:m.filterAir,brakes:m.brakes});showToast("✅ تم الحفظ");},
+  async getFuel(){const{data}=await sb.from("fleet_fuel").select("*");return(data||[]).map(r=>({id:r.id,vehicleId:r.vehicle_id,date:r.date,prevKm:r.prev_km,currKm:r.curr_km,dist:r.dist,amount:r.amount,costPerKm:r.cost_per_km}));},
+  async saveFuel(f){await sb.from("fleet_fuel").upsert({id:f.id,vehicle_id:f.vehicleId,date:f.date,prev_km:f.prevKm,curr_km:f.currKm,dist:f.dist,amount:f.amount,cost_per_km:f.costPerKm});showToast("✅ تم الحفظ");},
+  async getDrivers(){const{data}=await sb.from("fleet_drivers").select("*");return(data||[]).map(r=>({id:r.id,name:r.name}));},
+  async saveDriver(d){await sb.from("fleet_drivers").upsert({id:d.id,name:d.name});showToast("✅ تم الحفظ");},
+  async deleteDriver(id){await sb.from("fleet_drivers").delete().eq("id",id);showToast("✅ تم الحذف");},
+  async uploadPhoto(file, handoverId, side) {
+    const ext = file.type.includes("png") ? "png" : "jpg";
+    const path = `handovers/${handoverId}/${side}.${ext}`;
+    const { error } = await sb.storage.from("fleet-photos").upload(path, file, { upsert:true, contentType:file.type });
+    if (error) throw error;
+    const { data } = sb.storage.from("fleet-photos").getPublicUrl(path);
+    return data.publicUrl;
+  },
+  async getSetting(key,def=""){const{data}=await sb.from("fleet_settings").select("value").eq("key",key).single();return data?data.value:def;},
+  async setSetting(key,value){await sb.from("fleet_settings").upsert({key,value:String(value)});},
+};
+
+const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2);
+const toDateStr = d => d ? new Date(d).toLocaleDateString("ar-JO") : "—";
+const daysDiff = (from, to=new Date()) => Math.floor((new Date(to)-new Date(from))/86400000);
+const fmt12 = date => { const d=new Date(date); let h=d.getHours(),m=d.getMinutes(); const ap=h>=12?"PM":"AM"; h=h%12||12; return `${h}:${String(m).padStart(2,"0")} ${ap}`; };
+const todayISO = () => new Date().toISOString().split("T")[0];
+const sendWA = (phone, msg) => { if(!phone) return; window.open(`https://wa.me/${phone.replace(/\D/g,"")}?text=${encodeURIComponent(msg)}`,"_blank"); };
+
+const DEFAULT_NOTES = ["السائق أبلغ متأخراً","مشكوك في صحتها","جارٍ مراجعة الجهة","السائق رفض الإقرار","تم إيقاف السائق مؤقتاً","أخرى"];
+const DEFAULT_EQUIP = ["مفتاح جنط","جك","عاكسة","سبير أمامي","سبير خلفي","ترخيص دعاية وإعلان","طفاية حريق","بطاقة تعبئة الوقود","رخصة المركبة"];
+const VTYPES = ["سرعة زائدة","وقوف مخالف","تجاوز إشارة","عدم الالتزام بالحارة","استخدام الجوال","عدم ربط الحزام","أخرى"];
+
+// ══════════════════════════════════════════════════
+// SHARED UI COMPONENTS
+// ══════════════════════════════════════════════════
+function Badge({ label, color }) {
+  return <span style={{ background:color+"22", color, border:`1px solid ${color}44`, borderRadius:20, padding:"2px 10px", fontSize:11, ...GF, whiteSpace:"nowrap" }}>{label}</span>;
+}
+
+function StatBox({ icon, label, value, color=T.gold }) {
+  return (
+    <div style={{ background:T.card2, borderRadius:14, padding:"14px 16px", flex:1, minWidth:0, borderTop:`3px solid ${color}` }}>
+      <div style={{ fontSize:22 }}>{icon}</div>
+      <div style={{ color, fontSize:20, fontWeight:700, ...GF, marginTop:4, lineHeight:1 }}>{value}</div>
+      <div style={{ color:T.sub, fontSize:11, ...GF, marginTop:4, lineHeight:1.3 }}>{label}</div>
+    </div>
+  );
+}
+
+function Modal({ show, onClose, title, children }) {
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", zIndex:1000, display:show?"flex":"none", alignItems:"flex-end" }} onClick={onClose}>
+      <div style={{ background:T.card, borderRadius:"24px 24px 0 0", width:"100%", maxHeight:"92vh", overflowY:"auto", padding:"24px 20px 48px" }} onClick={e=>e.stopPropagation()}>
+        <div style={{ width:40, height:4, background:T.border, borderRadius:2, margin:"0 auto 20px" }}/>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+          <h2 style={{ color:T.gold, ...GF, fontSize:17, fontWeight:700, margin:0 }}>{title}</h2>
+          <button onClick={onClose} style={{ background:T.card3, border:"none", color:T.sub, borderRadius:8, padding:"6px 14px", cursor:"pointer", ...GF }}>✕</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, value, onChange, type="text", placeholder="", req }) {
+  return (
+    <div style={{ marginBottom:14 }}>
+      {label && <label style={{ color:T.sub, fontSize:12, ...GF, display:"block", marginBottom:6 }}>{label}{req?" *":""}</label>}
+      <input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
+        style={{ width:"100%", background:T.card2, border:`1px solid ${T.border}`, borderRadius:10, padding:"11px 14px", color:T.text, fontSize:14, ...GF, boxSizing:"border-box", outline:"none" }}/>
+    </div>
+  );
+}
+
+function FieldSelect({ label, value, onChange, opts, req }) {
+  return (
+    <div style={{ marginBottom:14 }}>
+      {label && <label style={{ color:T.sub, fontSize:12, ...GF, display:"block", marginBottom:6 }}>{label}{req?" *":""}</label>}
+      <select value={value} onChange={e=>onChange(e.target.value)}
+        style={{ width:"100%", background:T.card2, border:`1px solid ${T.border}`, borderRadius:10, padding:"11px 14px", color:value?T.text:T.sub, fontSize:14, ...GF, boxSizing:"border-box", outline:"none" }}>
+        <option value="">— اختر —</option>
+        {opts.map(o => <option key={o.v||o} value={o.v||o}>{o.l||o}</option>)}
+      </select>
+    </div>
+  );
+}
+
+function Btn({ label, onClick, color=T.gold, full, sm, disabled, outline }) {
+  return (
+    <button onClick={onClick} disabled={disabled}
+      style={{ background:outline?"transparent":disabled?T.border:color, color:outline?color:disabled?T.sub:"#000",
+        border:outline?`1.5px solid ${color}`:"none", borderRadius:12, padding:sm?"8px 16px":"13px 20px",
+        fontSize:sm?12:15, ...GF, fontWeight:700, cursor:disabled?"not-allowed":"pointer",
+        width:full?"100%":"auto", opacity:disabled?0.5:1 }}>
+      {label}
+    </button>
+  );
+}
+
+function ConfirmDialog({ show, title, body, onConfirm, onCancel }) {
+  return (
+    <Modal show={show} onClose={onCancel} title={title||"⚠️ تأكيد الحذف"}>
+      {body && (
+        <div style={{ background:T.red+"15", border:`1px solid ${T.red}33`, borderRadius:12, padding:"14px 16px", marginBottom:20, textAlign:"center" }}>
+          <div style={{ fontSize:32, marginBottom:8 }}>🗑️</div>
+          <p style={{ color:T.text, ...GF, fontSize:14, margin:0 }}>{body}</p>
+        </div>
+      )}
+      <div style={{ display:"flex", gap:10 }}>
+        <div style={{ flex:1 }}><Btn label="إلغاء" onClick={onCancel} full outline color={T.sub}/></div>
+        <div style={{ flex:1 }}><Btn label="تأكيد الحذف" onClick={onConfirm} full color={T.red}/></div>
+      </div>
+    </Modal>
+  );
+}
+
+function Header({ title, onBack, right }) {
+  return (
+    <div style={{ background:T.card, padding:"16px 18px", display:"flex", alignItems:"center", justifyContent:"space-between", borderBottom:`1px solid ${T.border}`, position:"sticky", top:0, zIndex:50, boxShadow:T.shadow }}>
+      {onBack
+        ? <button onClick={onBack} style={{ background:T.goldGlow, border:`1px solid rgba(245,197,66,0.2)`, color:T.gold, fontSize:13, fontWeight:700, cursor:"pointer", borderRadius:8, padding:"8px 14px", ...GF, display:"flex", alignItems:"center", gap:4 }}>← رجوع</button>
+        : <div style={{width:80}}/>}
+      <span style={{ color:T.text, ...GF, fontSize:16, fontWeight:800 }}>{title}</span>
+      <div style={{ width:80, textAlign:"left" }}>{right}</div>
+    </div>
+  );
+}
+
+function VehicleSelector({ vehicles, selected, onChange, label="المركبة" }) {
+  return (
+    <div style={{ padding:"10px 14px", borderBottom:`1px solid ${T.border}`, background:T.card }}>
+      <select value={selected||""} onChange={e=>onChange(e.target.value)}
+        style={{ width:"100%", background:T.card2, border:`1px solid ${T.gold}44`, borderRadius:10, padding:"10px 14px", color:selected?T.gold:T.sub, fontSize:14, ...GF, outline:"none", fontWeight:600 }}>
+        <option value="">— اختر {label} —</option>
+        {vehicles.map(v => <option key={v.id} value={v.id}>{v.plate}{v.type?` — ${v.type}`:""}</option>)}
+      </select>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════
+// SIGNATURE PAD
+// ══════════════════════════════════════════════════
+function SignaturePad({ onSave, onCancel }) {
+  const canvasRef = useRef(null);
+  const drawing = useRef(false);
+  const lastPos = useRef(null);
+
+  const getPos = (e, canvas) => {
+    const rect = canvas.getBoundingClientRect();
+    const touch = e.touches ? e.touches[0] : e;
+    return { x:(touch.clientX-rect.left)*(canvas.width/rect.width), y:(touch.clientY-rect.top)*(canvas.height/rect.height) };
+  };
+
+  const initCanvas = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#1a1e2e";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = "#252840";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(20, canvas.height-40);
+    ctx.lineTo(canvas.width-20, canvas.height-40);
+    ctx.stroke();
+  };
+
+  useEffect(() => { initCanvas(); }, []);
+
+  const start = e => { e.preventDefault(); drawing.current=true; lastPos.current=getPos(e, canvasRef.current); };
+  const move = e => {
+    e.preventDefault();
+    if (!drawing.current) return;
+    const canvas = canvasRef.current, ctx = canvas.getContext("2d");
+    const pos = getPos(e, canvas);
+    ctx.beginPath(); ctx.moveTo(lastPos.current.x, lastPos.current.y);
+    ctx.lineTo(pos.x, pos.y); ctx.strokeStyle="#D4AF37"; ctx.lineWidth=2.5; ctx.lineCap="round"; ctx.stroke();
+    lastPos.current = pos;
+  };
+  const end = e => { e.preventDefault(); drawing.current = false; };
+  const clear = () => initCanvas();
+
+  return (
+    <div>
+      <p style={{ color:T.sub, ...GF, fontSize:12, marginBottom:8, textAlign:"center" }}>وقّع بإصبعك في المنطقة أدناه</p>
+      <canvas ref={canvasRef} width={320} height={160}
+        style={{ width:"100%", borderRadius:12, border:`2px solid ${T.gold}44`, display:"block" }}
+        onMouseDown={start} onMouseMove={move} onMouseUp={end}
+        onTouchStart={start} onTouchMove={move} onTouchEnd={end}/>
+      <div style={{ display:"flex", gap:8, marginTop:12 }}>
+        <Btn label="مسح" onClick={clear} outline color={T.sub} sm/>
+        <Btn label="إلغاء" onClick={onCancel} outline color={T.red} sm/>
+        <div style={{flex:1}}><Btn label="✓ حفظ التوقيع" onClick={()=>onSave(canvasRef.current.toDataURL())} full color={T.gold} sm/></div>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════
+// VEHICLE IMPORTER
+// ══════════════════════════════════════════════════
+function VehicleImporter({ vehicles, saveVehicles, saveOneVehicle, deleteVehicle }) {
+  const [step, setStep] = useState("idle");
+  const [rawRows, setRawRows] = useState([]);
+  const [headers, setHeaders] = useState([]);
+  const [mapping, setMapping] = useState({});
+  const [preview, setPreview] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [editVeh, setEditVeh] = useState(null);
+  const [showList, setShowList] = useState(false);
+  const [editForm, setEditForm] = useState({});
+  const [confirmDel, setConfirmDel] = useState(null); // { id, plate }
+
+  const FIELDS = [
+    { key:"plate", label:"رقم اللوحة", required:true },
+    { key:"regNum", label:"رقم التسجيل" },
+    { key:"type", label:"نوع المركبة" },
+    { key:"make", label:"الصنع/الماركة" },
+  ];
+
+  const readFile = async file => {
+    setLoading(true); setMsg("جارٍ قراءة الملف...");
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type:"array" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const data = XLSX.utils.sheet_to_json(ws, { header:1, defval:"" });
+      if (!data.length) { setMsg("❌ الملف فارغ"); setLoading(false); return; }
+      const hdrs = data[0].map(h => String(h).trim());
+      const rows = data.slice(1).filter(r => r.some(c => c !== ""));
+      setHeaders(hdrs); setRawRows(rows);
+      // Auto detect
+      const map = {};
+      const lower = hdrs.map(h => String(h).toLowerCase().trim());
+      const match = kws => { const i = lower.findIndex(h => kws.some(k => h.includes(k))); return i>=0 ? hdrs[i] : null; };
+      map.plate = match(["لوحة","plate","رقم المركب","رقم السيار","vehicle"]);
+      map.regNum = match(["تسجيل","registration","reg","chassis","هيكل"]);
+      map.type = match(["نوع","type","موديل","model","فئة"]);
+      map.make = match(["صنع","ماركة","make","brand","manufacturer","شركة"]);
+      setMapping(map);
+      setStep("mapping");
+      setMsg(map.plate ? "✅ تم التعرف على الأعمدة" : "⚠️ حدد عمود اللوحة يدوياً");
+    } catch { setMsg("❌ تعذّر قراءة الملف"); }
+    setLoading(false);
+  };
+
+  const buildPreview = () => {
+    if (!mapping.plate) { setMsg("❌ يجب تحديد عمود رقم اللوحة"); return; }
+    const pI=headers.indexOf(mapping.plate), rI=mapping.regNum?headers.indexOf(mapping.regNum):-1;
+    const tI=mapping.type?headers.indexOf(mapping.type):-1, mI=mapping.make?headers.indexOf(mapping.make):-1;
+    const rows = rawRows.map(r => ({
+      id:uid(), plate:String(r[pI]||"").trim(), regNum:rI>=0?String(r[rI]||"").trim():"",
+      type:tI>=0?String(r[tI]||"").trim():"", make:mI>=0?String(r[mI]||"").trim():"",
+      license_exp:"", insurance_exp:"", renewHistory:[]
+    })).filter(r => r.plate);
+    setPreview(rows); setStep("preview"); setMsg("");
+  };
+
+  const confirmImport = () => {
+    // دمج: الحفاظ على بيانات الترخيص والتأمين والوقود للمركبات الموجودة
+    const merged = preview.map(p => {
+      const exist = vehicles.find(v => v.plate===p.plate);
+      if (exist) return { ...p, id:exist.id, fuelType:exist.fuelType||p.fuelType||"", license_exp:exist.license_exp||"", insurance_exp:exist.insurance_exp||"", renewHistory:exist.renewHistory||[] };
+      return p;
+    });
+    const existing = vehicles.filter(v => !preview.some(p => p.plate===v.plate));
+    saveVehicles([...existing, ...merged]);
+    setStep("done"); setMsg(`✅ تم استيراد ${preview.length} مركبة`);
+    setTimeout(() => { setStep("idle"); setMsg(""); }, 3000);
+  };
+
+  return (
+    <div>
+      {/* Vehicle List */}
+      <div style={{ background:T.card2, borderRadius:12, marginBottom:14, overflow:"hidden" }}>
+        <button onClick={()=>setShowList(!showList)} style={{ width:"100%", background:"none", border:"none", padding:"14px 16px", display:"flex", justifyContent:"space-between", cursor:"pointer" }}>
+          <span style={{ color:T.text, ...GF, fontSize:14 }}>🚗 المركبات المحفوظة ({vehicles.length})</span>
+          <span style={{ color:T.sub }}>{showList?"▲":"▼"}</span>
+        </button>
+        {showList && (
+          <div style={{ borderTop:`1px solid ${T.border}`, padding:"10px 14px" }}>
+            {!vehicles.length
+              ? <div style={{ color:T.sub, ...GF, fontSize:13, textAlign:"center", padding:16 }}>لا توجد مركبات بعد</div>
+              : vehicles.map(v => (
+                <div key={v.id} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", background:T.card, borderRadius:10, padding:"10px 12px", marginBottom:8 }}>
+                  <div>
+                    <div style={{ color:T.gold, ...GF, fontWeight:700, fontSize:14 }}>{v.plate}</div>
+                    <div style={{ color:T.sub, ...GF, fontSize:11, marginTop:2 }}>{[v.type,v.make,v.regNum].filter(Boolean).join(" | ")||"—"}</div>
+                  </div>
+                  <div style={{ display:"flex", gap:6 }}>
+                    <button onClick={()=>{ setEditVeh(v.id); setEditForm({plate:v.plate,regNum:v.regNum||"",type:v.type||"",make:v.make||"",license_exp:v.license_exp||"",insurance_exp:v.insurance_exp||"",fuelType:v.fuelType||""}); }}
+                      style={{ background:T.blue+"22", border:"none", color:T.blue, borderRadius:8, padding:"5px 12px", cursor:"pointer", ...GF, fontSize:12 }}>تعديل</button>
+                    <button onClick={()=>setConfirmDel({ id:v.id, plate:v.plate })}
+                      style={{ background:T.red+"22", border:"none", color:T.red, borderRadius:8, padding:"5px 12px", cursor:"pointer", ...GF, fontSize:12 }}>حذف</button>
+                  </div>
+                </div>
+              ))
+            }
+          </div>
+        )}
+      </div>
+
+      {/* Import */}
+      {step==="idle" && (
+        <div>
+          <label style={{ display:"block", background:T.card2, borderRadius:14, padding:"22px 16px", textAlign:"center", cursor:"pointer", border:`2px dashed ${T.gold}44` }}>
+            <input type="file" accept=".xlsx,.xls,.csv" onChange={e=>{ if(e.target.files[0]) readFile(e.target.files[0]); }} style={{ display:"none" }}/>
+            <div style={{ fontSize:36, marginBottom:8 }}>📂</div>
+            <div style={{ color:T.gold, ...GF, fontSize:15, fontWeight:700 }}>رفع ملف Excel</div>
+            <div style={{ color:T.sub, ...GF, fontSize:12, marginTop:6 }}>xlsx / xls / csv — يتعرف تلقائياً على الأعمدة</div>
+          </label>
+          {msg && <div style={{ marginTop:10, color:T.red, ...GF, fontSize:13, textAlign:"center" }}>{msg}</div>}
+        </div>
+      )}
+
+      {loading && <div style={{ textAlign:"center", padding:24 }}><div style={{ fontSize:32 }}>🔍</div><div style={{ color:T.gold, ...GF, fontSize:14, marginTop:8 }}>{msg}</div></div>}
+
+      {step==="mapping" && !loading && (
+        <div>
+          <div style={{ color:T.gold, ...GF, fontSize:15, fontWeight:700, marginBottom:14 }}>🗂️ تأكيد خريطة الأعمدة</div>
+          {msg && <div style={{ color:msg.includes("✅")?T.green:T.yellow, ...GF, fontSize:12, marginBottom:12 }}>{msg}</div>}
+          {FIELDS.map(f => (
+            <div key={f.key} style={{ marginBottom:12 }}>
+              <label style={{ color:T.sub, fontSize:12, ...GF, display:"block", marginBottom:6 }}>{f.label}{f.required?" *":""}</label>
+              <select value={mapping[f.key]||""} onChange={e=>setMapping({...mapping,[f.key]:e.target.value||null})}
+                style={{ width:"100%", background:T.card2, border:`1px solid ${mapping[f.key]?T.gold:T.border}`, borderRadius:10, padding:"10px 14px", color:mapping[f.key]?T.gold:T.sub, fontSize:13, ...GF, outline:"none" }}>
+                <option value="">— لا يوجد —</option>
+                {headers.map(h => <option key={h} value={h}>{h}</option>)}
+              </select>
+            </div>
+          ))}
+          <div style={{ display:"flex", gap:8, marginTop:16 }}>
+            <Btn label="← رجوع" onClick={()=>setStep("idle")} outline color={T.sub} sm/>
+            <div style={{flex:1}}><Btn label="معاينة البيانات →" onClick={buildPreview} full color={T.gold}/></div>
+          </div>
+        </div>
+      )}
+
+      {step==="preview" && (
+        <div>
+          <div style={{ color:T.gold, ...GF, fontSize:15, fontWeight:700, marginBottom:4 }}>👁️ معاينة</div>
+          <div style={{ color:T.sub, ...GF, fontSize:12, marginBottom:14 }}>{preview.length} مركبة جاهزة</div>
+          <div style={{ maxHeight:240, overflowY:"auto", marginBottom:14 }}>
+            {preview.slice(0,20).map((v,i) => (
+              <div key={i} style={{ background:T.card2, borderRadius:10, padding:"10px 12px", marginBottom:8, display:"flex", justifyContent:"space-between" }}>
+                <div>
+                  <div style={{ color:T.gold, ...GF, fontWeight:700, fontSize:14 }}>{v.plate}</div>
+                  <div style={{ color:T.sub, ...GF, fontSize:11, marginTop:2 }}>{[v.type,v.make,v.regNum].filter(Boolean).join(" | ")||"—"}</div>
+                </div>
+                <span style={{ color:T.green, fontSize:18 }}>✓</span>
+              </div>
+            ))}
+            {preview.length>20 && <div style={{ color:T.sub, ...GF, fontSize:12, textAlign:"center", padding:8 }}>...و{preview.length-20} أخرى</div>}
+          </div>
+          <div style={{ display:"flex", gap:8 }}>
+            <Btn label="← تعديل" onClick={()=>setStep("mapping")} outline color={T.sub} sm/>
+            <div style={{flex:1}}><Btn label={`✓ استيراد ${preview.length} مركبة`} onClick={confirmImport} full color={T.green}/></div>
+          </div>
+        </div>
+      )}
+
+      {step==="done" && <div style={{ color:T.green, ...GF, fontSize:15, textAlign:"center", padding:20 }}>{msg}</div>}
+
+      {editVeh && (
+        <Modal show={true} onClose={()=>setEditVeh(null)} title="تعديل بيانات المركبة">
+          <Field label="رقم اللوحة" value={editForm.plate} onChange={v=>setEditForm({...editForm,plate:v})} req/>
+          <Field label="رقم التسجيل" value={editForm.regNum} onChange={v=>setEditForm({...editForm,regNum:v})}/>
+          <Field label="نوع المركبة" value={editForm.type} onChange={v=>setEditForm({...editForm,type:v})}/>
+          <Field label="الصنع/الماركة" value={editForm.make} onChange={v=>setEditForm({...editForm,make:v})}/>
+          <div style={{marginBottom:14}}>
+            <label style={{color:T.sub,fontSize:12,...GF,display:"block",marginBottom:6}}>نوع الوقود</label>
+            <select value={editForm.fuelType||""} onChange={e=>setEditForm({...editForm,fuelType:e.target.value})}
+              style={{width:"100%",background:T.card2,border:`1px solid ${T.border}`,borderRadius:10,padding:"11px 14px",color:T.text,fontSize:14,...GF,boxSizing:"border-box",outline:"none"}}>
+              <option value="">بنزين / ديزل</option>
+              <option value="electric">⚡ كهربائية</option>
+              <option value="hybrid">🔋 هايبرد</option>
+            </select>
+          </div>
+          <Field label="تاريخ انتهاء الترخيص" value={editForm.license_exp} onChange={v=>setEditForm({...editForm,license_exp:v})} type="date"/>
+          <Field label="تاريخ انتهاء التأمين" value={editForm.insurance_exp} onChange={v=>setEditForm({...editForm,insurance_exp:v})} type="date"/>
+          <Btn label="✓ حفظ التعديل" onClick={async()=>{ await saveOneVehicle({...vehicles.find(v=>v.id===editVeh),...editForm}); setEditVeh(null); }} full color={T.gold}/>
+        </Modal>
+      )}
+      <ConfirmDialog
+        show={!!confirmDel}
+        title="⚠️ حذف مركبة"
+        body={confirmDel ? `هل تريد حذف المركبة "${confirmDel.plate}" نهائياً؟ لا يمكن التراجع عن هذا الإجراء.` : ""}
+        onConfirm={async()=>{ await deleteVehicle(confirmDel.id); setConfirmDel(null); }}
+        onCancel={()=>setConfirmDel(null)}
+      />
+    </div>
+  );
+}
+// ══════════════════════════════════════════════════
+function buildNotifications(violations, vehicles, maintenanceRecs, fuelRecords) {
+  const notes = [];
+
+  violations.filter(v => v.status !== "مسددة").forEach(v => {
+    const r = 30 - daysDiff(v.vdate);
+    if (r<=0) notes.push({ id:"viol-"+v.id, icon:"⛔", title:"مخالفة — انتهت المهلة", body:`${v.plate} — ${v.vtype}`, color:T.red, tab:"violations", priority:true });
+    else if (r<=5) notes.push({ id:"viol-"+v.id, icon:"🔴", title:`مخالفة — ${r} أيام متبقية`, body:`${v.plate} — ${v.vtype}`, color:T.red, tab:"violations", priority:true });
+    else if (r<=10) notes.push({ id:"viol-"+v.id, icon:"🟠", title:`مخالفة — ${r} يوم متبقي`, body:`${v.plate}`, color:T.orange, tab:"violations" });
+  });
+
+  vehicles.forEach(v => {
+    const chk = (exp, label) => {
+      if (!exp) return;
+      const expMs = new Date(exp).setHours(0,0,0,0);
+      const todayMs = new Date().setHours(0,0,0,0);
+      if (isNaN(expMs)) return;
+      const diff = Math.floor((expMs - todayMs) / 86400000);
+      if (diff < 0) notes.push({ id:"lic-"+v.id+label, icon:"🔴", title:`${label} منتهي`, body:v.plate, color:T.red, tab:"license", priority:true });
+      else if (diff <= 3) notes.push({ id:"lic-"+v.id+label, icon:"🔴", title:`${label} — ${diff} أيام`, body:v.plate, color:T.red, tab:"license", priority:true });
+      else if (diff <= 7) notes.push({ id:"lic-"+v.id+label, icon:"🟠", title:`${label} — ${diff} أيام`, body:v.plate, color:T.orange, tab:"license" });
+      else if (diff <= 14) notes.push({ id:"lic-"+v.id+label, icon:"🟡", title:`${label} — ${diff} يوم`, body:v.plate, color:T.yellow, tab:"license" });
+    };
+    if (v.license_exp) chk(v.license_exp, "الترخيص");
+    if (v.insurance_exp) chk(v.insurance_exp, "التأمين");
+  });
+
+  vehicles.forEach(v => {
+    const fRecs = fuelRecords.filter(r=>r.vehicleId===v.id).sort((a,b)=>b.currKm-a.currKm);
+    const currKm = fRecs.length ? fRecs[0].currKm : null;
+    const mRecs = maintenanceRecs.filter(r=>r.vehicleId===v.id).sort((a,b)=>a.oilKm-b.oilKm);
+    if (!mRecs.length) return;
+    const last = mRecs[mRecs.length-1];
+    const nextOil = last.nextOilKm || (last.oilKm+5000);
+    if (currKm) {
+      const diff = nextOil - currKm;
+      if (diff<=0) notes.push({ id:"maint-"+v.id, icon:"🔴", title:"غيار زيت متأخر", body:`${v.plate} — تجاوز ${Math.abs(diff).toLocaleString()} كلم`, color:T.red, tab:"maintenance", priority:true });
+      else if (diff<=500) notes.push({ id:"maint-"+v.id, icon:"🟠", title:"غيار زيت قريب", body:`${v.plate} — ${diff.toLocaleString()} كلم`, color:T.orange, tab:"maintenance" });
+    }
+  });
+
+  return notes;
+}
+
+function NotificationsPanel({ notes, onNav, onClose }) {
+  if (!notes.length) return (
+    <div style={{ padding:"32px 20px", textAlign:"center" }}>
+      <div style={{ fontSize:44, marginBottom:12 }}>✅</div>
+      <div style={{ color:T.sub, ...GF, fontSize:15 }}>لا توجد تنبيهات</div>
+    </div>
+  );
+  return (
+    <div>
+      {notes.map(n => (
+        <button key={n.id} onClick={()=>{ onNav(n.tab); onClose(); }}
+          style={{ width:"100%", background:T.card2, border:`1px solid ${n.color}33`, borderRadius:14, padding:"12px 14px", marginBottom:10, display:"flex", alignItems:"center", gap:12, cursor:"pointer", borderRight:`4px solid ${n.color}` }}>
+          <span style={{ fontSize:22, flexShrink:0 }}>{n.icon}</span>
+          <div style={{ flex:1, textAlign:"right" }}>
+            <div style={{ color:n.color, ...GF, fontSize:13, fontWeight:700 }}>{n.title}</div>
+            <div style={{ color:T.sub, ...GF, fontSize:12, marginTop:3 }}>{n.body}</div>
+          </div>
+          <span style={{ color:T.border, fontSize:16 }}>‹</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════
+// GLOBAL SEARCH
+// ══════════════════════════════════════════════════
+function GlobalSearch({ vehicles, violations, drivers, handovers, fuelRecords, maintenanceRecs,
+  saveViolation, saveHandover, saveFuel, saveMaintenance, noteOptions, equipmentList, onClose }) {
+
+  const [q, setQ] = useState("");
+  const [view, setView] = useState("search"); // "search"|"vehicle"|"driver"|"qviolation"|"qhandover"|"qfuel"|"qmaintenance"
+  const [selVeh, setSelVeh] = useState(null);
+  const [selDrv, setSelDrv] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const inp = React.useRef(null);
+
+  // quick-form states
+  const [qvForm, setQvForm] = useState({});
+  const [qhForm, setQhForm] = useState({});
+  const [qfForm, setQfForm] = useState({});
+  const [qmForm, setQmForm] = useState({});
+
+  useEffect(() => { if(view==="search") setTimeout(()=>inp.current&&inp.current.focus(),100); }, [view]);
+
+  const results = React.useMemo(() => {
+    const s = q.trim().toLowerCase();
+    if (s.length < 2) return [];
+    const out = [];
+    vehicles.forEach(v => {
+      if ([v.plate,v.type,v.make,v.regNum].some(x=>(x||"").toLowerCase().includes(s)))
+        out.push({ type:"vehicle", icon:"🚗", title:v.plate, sub:[v.type,v.make].filter(Boolean).join(" | ")||"مركبة", color:T.gold, obj:v });
+    });
+    violations.forEach(v => {
+      if ([v.plate,v.driver,v.vtype,v.vnum].some(x=>(x||"").toLowerCase().includes(s)))
+        out.push({ type:"violation", icon:"🚨", title:`${v.plate} — ${v.driver}`, sub:`${v.vtype} | ${v.amount} د.أ | ${v.status}`, color:T.red, obj:v });
+    });
+    drivers.forEach(d => {
+      if ((d.name||"").toLowerCase().includes(s))
+        out.push({ type:"driver", icon:"👤", title:d.name, sub:"سائق", color:T.blue, obj:d });
+    });
+    return out.slice(0, 12);
+  }, [q, vehicles, violations, drivers]);
+
+  // ── helpers ──
+  const licStatus = exp => {
+    if (!exp) return { label:"غير مدخل", color:T.sub };
+    const diff = Math.floor((new Date(exp).setHours(0,0,0,0) - new Date().setHours(0,0,0,0)) / 86400000);
+    if (isNaN(diff)) return { label:"غير مدخل", color:T.sub };
+    if (diff < 0) return { label:"منتهي", color:T.red };
+    if (diff <= 14) return { label:`${diff} يوم`, color:diff<=3?T.red:T.orange };
+    return { label:"ساري", color:T.green };
+  };
+  const IR = ({ label, value, color=T.text }) => (
+    <div style={{ display:"flex", justifyContent:"space-between", padding:"8px 0", borderBottom:`1px solid ${T.border}` }}>
+      <span style={{ color:T.sub, ...GF, fontSize:13 }}>{label}</span>
+      <span style={{ color, ...GF, fontSize:13, fontWeight:600 }}>{value}</span>
+    </div>
+  );
+  const CardSection = ({ title, color, children }) => (
+    <div style={{ background:T.card2, borderRadius:12, padding:"12px 14px", marginBottom:10, borderRight:`3px solid ${color}` }}>
+      <div style={{ color:T.text, ...GF, fontWeight:700, fontSize:13, marginBottom:8 }}>{title}</div>
+      {children}
+    </div>
+  );
+  const openVehicleCard = v => {
+    setSelVeh(v);
+    setQvForm({ plate:v.plate, driver:"", vdate:todayISO(), vtype:"", amount:"", note:"" });
+    setQhForm({ type:"استلام", driver:"", date:new Date().toISOString().slice(0,16), equip:{} });
+    setQfForm({ date:todayISO(), prevKm:"", currKm:"", amount:"" });
+    setQmForm({ oilKm:"", date:todayISO(), filterOil:0, filterDiesel:0, filterAir:0, brakes:0 });
+    setView("vehicle");
+  };
+  const openDriverCard = d => { setSelDrv(d); setView("driver"); };
+
+
+  // ── Quick Save Functions ──
+  const doSaveViolation = async () => {
+    if (!qvForm.driver||!qvForm.vdate||!qvForm.vtype||!qvForm.amount) { showToast("أكمل الحقول المطلوبة",T.red); return; }
+    setSaving(true);
+    try {
+      await saveViolation({ id:uid(), plate:qvForm.plate, driver:qvForm.driver, vdate:qvForm.vdate, vtype:qvForm.vtype, vnum:"", amount:+qvForm.amount, note:qvForm.note||"", status:"مفتوحة" });
+      setView("vehicle");
+    } catch(e) { showToast("❌ فشل الحفظ",T.red); } finally { setSaving(false); }
+  };
+  const doSaveHandover = async () => {
+    if (!qhForm.driver) { showToast("أدخل اسم السائق",T.red); return; }
+    setSaving(true);
+    try {
+      await saveHandover({ id:uid(), vehicleId:selVeh.id, type:qhForm.type, driver:qhForm.driver, date:qhForm.date||new Date().toISOString(), equip:qhForm.equip||{}, photos:{}, signature:"" });
+      setView("vehicle");
+    } catch(e) { showToast("❌ فشل الحفظ",T.red); } finally { setSaving(false); }
+  };
+  const doSaveFuel = async () => {
+    if (!qfForm.currKm||!qfForm.amount) { showToast("أكمل الحقول المطلوبة",T.red); return; }
+    const dist = qfForm.prevKm ? (+qfForm.currKm - +qfForm.prevKm) : 0;
+    const costPerKm = dist>0 ? (+qfForm.amount/dist) : 0;
+    setSaving(true);
+    try {
+      await saveFuel({ id:uid(), vehicleId:selVeh.id, date:qfForm.date||todayISO(), prevKm:+qfForm.prevKm||0, currKm:+qfForm.currKm, dist, amount:+qfForm.amount, costPerKm });
+      setView("vehicle");
+    } catch(e) { showToast("❌ فشل الحفظ",T.red); } finally { setSaving(false); }
+  };
+  const doSaveMaintenance = async () => {
+    if (!qmForm.oilKm) { showToast("أدخل قراءة العداد",T.red); return; }
+    setSaving(true);
+    try {
+      await saveMaintenance({ id:uid(), vehicleId:selVeh.id, oilKm:+qmForm.oilKm, nextOilKm:+qmForm.oilKm+5000, date:qmForm.date||todayISO(), filterOil:qmForm.filterOil||0, filterDiesel:qmForm.filterDiesel||0, filterAir:qmForm.filterAir||0, brakes:qmForm.brakes||0 });
+      setView("vehicle");
+    } catch(e) { showToast("❌ فشل الحفظ",T.red); } finally { setSaving(false); }
+  };
+
+  // ── Counter component for maintenance ──
+  const QCounter = ({ label, value, onChange, limit }) => (
+    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", background:T.card3, borderRadius:10, padding:"10px 14px", marginBottom:8 }}>
+      <span style={{ color:value>=limit?T.red:T.text, ...GF, fontSize:13 }}>{label}</span>
+      <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+        <button onClick={()=>onChange(Math.max(0,value-1))} style={{ background:T.card2, border:`1px solid ${T.border}`, borderRadius:8, width:32, height:32, color:T.text, cursor:"pointer", ...GF, fontWeight:700 }}>−</button>
+        <span style={{ color:value>=limit?T.red:T.gold, ...GF, fontWeight:700, minWidth:32, textAlign:"center" }}>{value}/{limit}</span>
+        <button onClick={()=>onChange(Math.min(limit,value+1))} style={{ background:T.card2, border:`1px solid ${T.border}`, borderRadius:8, width:32, height:32, color:T.text, cursor:"pointer", ...GF, fontWeight:700 }}>+</button>
+      </div>
+    </div>
+  );
+
+  // ══ VEHICLE CARD ══
+  if (view==="vehicle" && selVeh) {
+    const vViol = violations.filter(v=>v.plate===selVeh.plate && v.status!=="مسددة");
+    const vFuel = fuelRecords.filter(r=>r.vehicleId===selVeh.id).sort((a,b)=>new Date(b.date)-new Date(a.date));
+    const lastFuel = vFuel[0];
+    const avgCost = vFuel.length ? (vFuel.reduce((s,r)=>s+(r.costPerKm||0),0)/vFuel.length).toFixed(3) : null;
+    const vMaint = maintenanceRecs.filter(r=>r.vehicleId===selVeh.id).sort((a,b)=>a.oilKm-b.oilKm);
+    const lastMaint = vMaint[vMaint.length-1];
+    const lastHand = handovers.filter(h=>h.vehicleId===selVeh.id).sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
+    return (
+      <div>
+        <button onClick={()=>setView("search")} style={{ background:"none", border:"none", color:T.gold, ...GF, fontSize:13, cursor:"pointer", marginBottom:14, padding:0 }}>← رجوع للبحث</button>
+        {/* Vehicle Header */}
+        <div style={{ background:T.card2, borderRadius:14, padding:"14px 16px", marginBottom:12, borderTop:`3px solid ${T.gold}` }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+            <div style={{ color:T.gold, ...GF, fontSize:20, fontWeight:800 }}>{selVeh.plate}</div>
+            {selVeh.fuelType==="electric"&&<Badge label="⚡ كهربائية" color={T.green}/>}
+            {selVeh.fuelType==="hybrid"&&<Badge label="🔋 هايبرد" color={T.blue}/>}
+          </div>
+          <div style={{ color:T.sub, ...GF, fontSize:12, marginTop:4 }}>{[selVeh.type,selVeh.make,selVeh.regNum].filter(Boolean).join(" | ")||"—"}</div>
+        </div>
+        {/* Sections */}
+        <CardSection title="📋 الترخيص والتأمين" color={T.blue}>
+          <IR label="الترخيص" value={selVeh.license_exp?toDateStr(selVeh.license_exp):"غير مدخل"} color={licStatus(selVeh.license_exp).color}/>
+          <IR label="التأمين" value={selVeh.insurance_exp?toDateStr(selVeh.insurance_exp):"غير مدخل"} color={licStatus(selVeh.insurance_exp).color}/>
+        </CardSection>
+        <CardSection title="🚨 المخالفات النشطة" color={T.red}>
+          {vViol.length ? <>
+            <IR label="عدد المخالفات" value={vViol.length} color={T.red}/>
+            <IR label="إجمالي المبلغ" value={`${vViol.reduce((s,v)=>s+(+v.amount||0),0).toFixed(0)} د.أ`} color={T.orange}/>
+          </> : <div style={{ color:T.green, ...GF, fontSize:12 }}>✅ لا توجد مخالفات نشطة</div>}
+        </CardSection>
+        <CardSection title="🔑 آخر استلام/تسليم" color={T.green}>
+          {lastHand ? <>
+            <IR label="النوع" value={lastHand.type} color={lastHand.type==="استلام"?T.blue:T.green}/>
+            <IR label="السائق" value={lastHand.driver}/>
+            <IR label="التاريخ" value={toDateStr(lastHand.date)}/>
+          </> : <div style={{ color:T.sub, ...GF, fontSize:12 }}>لا يوجد سجل</div>}
+        </CardSection>
+        <CardSection title="🔧 الصيانة" color={T.orange}>
+          {lastMaint ? <>
+            <IR label="آخر غيار" value={`${lastMaint.oilKm?.toLocaleString()} كلم`}/>
+            <IR label="الغيار القادم" value={`${lastMaint.nextOilKm?.toLocaleString()} كلم`} color={T.orange}/>
+          </> : <div style={{ color:T.sub, ...GF, fontSize:12 }}>لا يوجد سجل صيانة</div>}
+        </CardSection>
+        <CardSection title="⛽ المحروقات" color={T.blue}>
+          {lastFuel ? <>
+            <IR label="آخر تعبئة" value={toDateStr(lastFuel.date)}/>
+            <IR label="آخر عداد" value={`${lastFuel.currKm?.toLocaleString()} كلم`}/>
+            {avgCost && <IR label="متوسط التكلفة/كلم" value={`${avgCost} د.أ`} color={T.blue}/>}
+          </> : <div style={{ color:T.sub, ...GF, fontSize:12 }}>لا يوجد سجل وقود</div>}
+        </CardSection>
+        {/* Action Buttons */}
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:4 }}>
+          {[
+            { label:"🚨 إضافة مخالفة", view:"qviolation", color:T.red },
+            { label:"🔑 استلام / تسليم", view:"qhandover", color:T.green },
+            { label:"⛽ تعبئة وقود", view:"qfuel", color:T.blue },
+            { label:"🔧 تسجيل صيانة", view:"qmaintenance", color:T.orange },
+          ].map(b => (
+            <button key={b.view} onClick={()=>setView(b.view)}
+              style={{ background:b.color+"22", border:`1px solid ${b.color}44`, borderRadius:12, padding:"12px 10px", color:b.color, ...GF, fontSize:13, fontWeight:700, cursor:"pointer" }}>
+              {b.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // ══ DRIVER CARD ══
+  if (view==="driver" && selDrv) {
+    const dHands = handovers.filter(h=>h.driver===selDrv.name).sort((a,b)=>new Date(b.date)-new Date(a.date));
+    const dViol = violations.filter(v=>v.driver===selDrv.name);
+    const activeViol = dViol.filter(v=>v.status!=="مسددة");
+    // current vehicle: last handover of type استلام with no تسليم after it
+    const lastHand = dHands[0];
+    const currentVeh = lastHand?.type==="استلام" ? vehicles.find(v=>v.id===lastHand.vehicleId) : null;
+    return (
+      <div>
+        <button onClick={()=>setView("search")} style={{ background:"none", border:"none", color:T.gold, ...GF, fontSize:13, cursor:"pointer", marginBottom:14, padding:0 }}>← رجوع للبحث</button>
+        <div style={{ background:T.card2, borderRadius:14, padding:"14px 16px", marginBottom:12, borderTop:`3px solid ${T.blue}` }}>
+          <div style={{ color:T.blue, ...GF, fontSize:20, fontWeight:800 }}>👤 {selDrv.name}</div>
+          <div style={{ marginTop:8 }}>
+            {currentVeh
+              ? <Badge label={`🚗 بحوزته: ${currentVeh.plate}`} color={T.green}/>
+              : <Badge label="لا توجد مركبة بحوزته" color={T.sub}/>}
+          </div>
+        </div>
+        <CardSection title="🚨 المخالفات" color={T.red}>
+          {activeViol.length
+            ? <><IR label="مخالفات نشطة" value={activeViol.length} color={T.red}/><IR label="إجمالي" value={`${activeViol.reduce((s,v)=>s+(+v.amount||0),0)} د.أ`} color={T.orange}/></>
+            : <div style={{ color:T.green, ...GF, fontSize:12 }}>✅ لا مخالفات نشطة</div>}
+          {dViol.length>0 && <IR label="إجمالي المخالفات التاريخية" value={dViol.length}/>}
+        </CardSection>
+        <CardSection title="🔑 سجل الحركة" color={T.green}>
+          {dHands.length ? dHands.slice(0,5).map((h,i)=>{
+            const veh = vehicles.find(v=>v.id===h.vehicleId);
+            return (
+              <div key={i} style={{ display:"flex", justifyContent:"space-between", padding:"7px 0", borderBottom:`1px solid ${T.border}` }}>
+                <span style={{ color:h.type==="استلام"?T.blue:T.green, ...GF, fontSize:12, fontWeight:700 }}>{h.type}</span>
+                <span style={{ color:T.gold, ...GF, fontSize:12 }}>{veh?veh.plate:"—"}</span>
+                <span style={{ color:T.sub, ...GF, fontSize:11 }}>{toDateStr(h.date)}</span>
+              </div>
+            );
+          }) : <div style={{ color:T.sub, ...GF, fontSize:12 }}>لا يوجد سجل</div>}
+          {dHands.length>5 && <div style={{ color:T.sub, ...GF, fontSize:11, marginTop:6, textAlign:"center" }}>+{dHands.length-5} سجل آخر</div>}
+        </CardSection>
+        {/* Quick handover for driver */}
+        <div style={{ marginTop:8 }}>
+          <p style={{ color:T.sub, ...GF, fontSize:12, marginBottom:10 }}>استلام / تسليم سريع لهذا السائق:</p>
+          <div style={{ marginBottom:10 }}>
+            <label style={{ color:T.sub, fontSize:12, ...GF, display:"block", marginBottom:6 }}>المركبة</label>
+            <select value={qhForm.vehicleId||""} onChange={e=>setQhForm({...qhForm,vehicleId:e.target.value})}
+              style={{ width:"100%", background:T.card2, border:`1px solid ${T.border}`, borderRadius:10, padding:"10px 14px", color:T.text, fontSize:14, ...GF, outline:"none" }}>
+              <option value="">— اختر المركبة —</option>
+              {vehicles.map(v=><option key={v.id} value={v.id}>{v.plate}{v.type?` — ${v.type}`:""}</option>)}
+            </select>
+          </div>
+          <div style={{ display:"flex", gap:8, marginBottom:12 }}>
+            {["استلام","تسليم"].map(t=>(
+              <button key={t} onClick={()=>setQhForm({...qhForm,type:t})}
+                style={{ flex:1, background:qhForm.type===t?T.green+"33":T.card2, border:`1px solid ${qhForm.type===t?T.green:T.border}`, borderRadius:10, padding:"10px", color:qhForm.type===t?T.green:T.sub, ...GF, fontWeight:700, cursor:"pointer" }}>{t}</button>
+            ))}
+          </div>
+          <Btn label={saving?"جارٍ الحفظ...":"✓ حفظ الحركة"} onClick={async()=>{
+            if(!qhForm.vehicleId){showToast("اختر المركبة",T.red);return;}
+            setSaving(true);
+            await saveHandover({id:uid(),vehicleId:qhForm.vehicleId,type:qhForm.type||"استلام",driver:selDrv.name,date:new Date().toISOString(),equip:{},photos:{},signature:""});
+            setSaving(false);
+          }} full color={T.green} disabled={saving}/>
+        </div>
+      </div>
+    );
+  }
+
+  // ══ QUICK VIOLATION FORM ══
+  if (view==="qviolation") return (
+    <div>
+      <button onClick={()=>setView("vehicle")} style={{ background:"none", border:"none", color:T.gold, ...GF, fontSize:13, cursor:"pointer", marginBottom:14, padding:0 }}>← رجوع للمركبة</button>
+      <div style={{ background:T.red+"22", border:`1px solid ${T.red}44`, borderRadius:12, padding:"10px 14px", marginBottom:16, display:"flex", gap:10, alignItems:"center" }}>
+        <span style={{ fontSize:22 }}>🚨</span>
+        <div><div style={{ color:T.red, ...GF, fontWeight:700, fontSize:14 }}>مخالفة جديدة</div><div style={{ color:T.sub, ...GF, fontSize:12 }}>{selVeh?.plate}</div></div>
+      </div>
+      <Field label="الموظف المسؤول *" value={qvForm.driver||""} onChange={v=>setQvForm({...qvForm,driver:v})} placeholder="اسم السائق"/>
+      <Field label="تاريخ المخالفة *" value={qvForm.vdate||""} onChange={v=>setQvForm({...qvForm,vdate:v})} type="date"/>
+      <FieldSelect label="نوع المخالفة *" value={qvForm.vtype||""} onChange={v=>setQvForm({...qvForm,vtype:v})} opts={VTYPES}/>
+      <Field label="قيمة المخالفة (د.أ) *" value={qvForm.amount||""} onChange={v=>setQvForm({...qvForm,amount:v})} type="number" placeholder="0"/>
+      <FieldSelect label="ملاحظة (اختياري)" value={qvForm.note||""} onChange={v=>setQvForm({...qvForm,note:v})} opts={noteOptions||[]}/>
+      <Btn label={saving?"جارٍ الحفظ...":"✓ حفظ المخالفة"} onClick={doSaveViolation} full color={T.red} disabled={saving}/>
+    </div>
+  );
+
+  // ══ QUICK HANDOVER FORM ══
+  if (view==="qhandover") return (
+    <div>
+      <button onClick={()=>setView("vehicle")} style={{ background:"none", border:"none", color:T.gold, ...GF, fontSize:13, cursor:"pointer", marginBottom:14, padding:0 }}>← رجوع للمركبة</button>
+      <div style={{ background:T.green+"22", border:`1px solid ${T.green}44`, borderRadius:12, padding:"10px 14px", marginBottom:16, display:"flex", gap:10, alignItems:"center" }}>
+        <span style={{ fontSize:22 }}>🔑</span>
+        <div><div style={{ color:T.green, ...GF, fontWeight:700, fontSize:14 }}>استلام / تسليم</div><div style={{ color:T.sub, ...GF, fontSize:12 }}>{selVeh?.plate}</div></div>
+      </div>
+      <div style={{ display:"flex", gap:8, marginBottom:14 }}>
+        {["استلام","تسليم"].map(t=>(
+          <button key={t} onClick={()=>setQhForm({...qhForm,type:t})}
+            style={{ flex:1, background:qhForm.type===t?T.green+"33":T.card2, border:`1px solid ${qhForm.type===t?T.green:T.border}`, borderRadius:10, padding:"11px", color:qhForm.type===t?T.green:T.sub, ...GF, fontWeight:700, cursor:"pointer", fontSize:15 }}>{t}</button>
+        ))}
+      </div>
+      <div style={{ marginBottom:14 }}>
+        <label style={{ color:T.sub, fontSize:12, ...GF, display:"block", marginBottom:6 }}>السائق *</label>
+        <select value={qhForm.driver||""} onChange={e=>setQhForm({...qhForm,driver:e.target.value})}
+          style={{ width:"100%", background:T.card2, border:`1px solid ${T.border}`, borderRadius:10, padding:"11px 14px", color:qhForm.driver?T.text:T.sub, fontSize:14, ...GF, outline:"none" }}>
+          <option value="">— اختر السائق —</option>
+          {drivers.map(d=><option key={d.id} value={d.name}>{d.name}</option>)}
+        </select>
+      </div>
+      <Btn label={saving?"جارٍ الحفظ...":"✓ حفظ الحركة"} onClick={doSaveHandover} full color={T.green} disabled={saving}/>
+    </div>
+  );
+
+  // ══ QUICK FUEL FORM ══
+  if (view==="qfuel") return (
+    <div>
+      <button onClick={()=>setView("vehicle")} style={{ background:"none", border:"none", color:T.gold, ...GF, fontSize:13, cursor:"pointer", marginBottom:14, padding:0 }}>← رجوع للمركبة</button>
+      <div style={{ background:T.blue+"22", border:`1px solid ${T.blue}44`, borderRadius:12, padding:"10px 14px", marginBottom:16, display:"flex", gap:10, alignItems:"center" }}>
+        <span style={{ fontSize:22 }}>⛽</span>
+        <div><div style={{ color:T.blue, ...GF, fontWeight:700, fontSize:14 }}>تعبئة وقود</div><div style={{ color:T.sub, ...GF, fontSize:12 }}>{selVeh?.plate}</div></div>
+      </div>
+      <Field label="التاريخ" value={qfForm.date||""} onChange={v=>setQfForm({...qfForm,date:v})} type="date"/>
+      <Field label="العداد السابق (كلم)" value={qfForm.prevKm||""} onChange={v=>setQfForm({...qfForm,prevKm:v})} type="number" placeholder="0"/>
+      <Field label="العداد الحالي (كلم) *" value={qfForm.currKm||""} onChange={v=>setQfForm({...qfForm,currKm:v})} type="number" placeholder="0"/>
+      {qfForm.prevKm && qfForm.currKm && +qfForm.currKm>+qfForm.prevKm && (
+        <div style={{ background:T.card2, borderRadius:10, padding:"8px 14px", marginBottom:14, display:"flex", justifyContent:"space-between" }}>
+          <span style={{ color:T.sub, ...GF, fontSize:13 }}>المسافة المقطوعة</span>
+          <span style={{ color:T.gold, ...GF, fontWeight:700 }}>{(+qfForm.currKm - +qfForm.prevKm).toLocaleString()} كلم</span>
+        </div>
+      )}
+      <Field label="التكلفة (د.أ) *" value={qfForm.amount||""} onChange={v=>setQfForm({...qfForm,amount:v})} type="number" placeholder="0"/>
+      <Btn label={saving?"جارٍ الحفظ...":"✓ حفظ التعبئة"} onClick={doSaveFuel} full color={T.blue} disabled={saving}/>
+    </div>
+  );
+
+  // ══ QUICK MAINTENANCE FORM ══
+  if (view==="qmaintenance") return (
+    <div>
+      <button onClick={()=>setView("vehicle")} style={{ background:"none", border:"none", color:T.gold, ...GF, fontSize:13, cursor:"pointer", marginBottom:14, padding:0 }}>← رجوع للمركبة</button>
+      <div style={{ background:T.orange+"22", border:`1px solid ${T.orange}44`, borderRadius:12, padding:"10px 14px", marginBottom:16, display:"flex", gap:10, alignItems:"center" }}>
+        <span style={{ fontSize:22 }}>🔧</span>
+        <div><div style={{ color:T.orange, ...GF, fontWeight:700, fontSize:14 }}>تسجيل غيار زيت</div><div style={{ color:T.sub, ...GF, fontSize:12 }}>{selVeh?.plate}</div></div>
+      </div>
+      <Field label="قراءة العداد عند الغيار (كلم) *" value={qmForm.oilKm||""} onChange={v=>setQmForm({...qmForm,oilKm:v})} type="number" placeholder="0"/>
+      {qmForm.oilKm && (
+        <div style={{ background:T.card2, borderRadius:10, padding:"8px 14px", marginBottom:14, display:"flex", justifyContent:"space-between" }}>
+          <span style={{ color:T.sub, ...GF, fontSize:13 }}>الغيار القادم تلقائياً</span>
+          <span style={{ color:T.orange, ...GF, fontWeight:700 }}>{(+qmForm.oilKm+5000).toLocaleString()} كلم</span>
+        </div>
+      )}
+      <Field label="تاريخ الغيار" value={qmForm.date||""} onChange={v=>setQmForm({...qmForm,date:v})} type="date"/>
+      <p style={{ color:T.sub, ...GF, fontSize:12, marginBottom:10 }}>حالة الفلاتر والبريكات:</p>
+      <QCounter label="فلتر الزيت (يستحق عند 2)" value={qmForm.filterOil||0} onChange={v=>setQmForm({...qmForm,filterOil:v})} limit={2}/>
+      <QCounter label="فلتر الديزل (يستحق عند 3)" value={qmForm.filterDiesel||0} onChange={v=>setQmForm({...qmForm,filterDiesel:v})} limit={3}/>
+      <QCounter label="فلتر الهواء (يستحق عند 3)" value={qmForm.filterAir||0} onChange={v=>setQmForm({...qmForm,filterAir:v})} limit={3}/>
+      <QCounter label="البريكات (تستحق عند 3)" value={qmForm.brakes||0} onChange={v=>setQmForm({...qmForm,brakes:v})} limit={3}/>
+      <Btn label={saving?"جارٍ الحفظ...":"✓ حفظ الصيانة"} onClick={doSaveMaintenance} full color={T.orange} disabled={saving}/>
+    </div>
+  );
+
+  // ══ SEARCH VIEW ══
+  return (
+    <div>
+      <div style={{ position:"relative", marginBottom:16 }}>
+        <input ref={inp} value={q} onChange={e=>setQ(e.target.value)} placeholder="ابحث عن مركبة، سائق، مخالفة..."
+          style={{ width:"100%", background:T.card2, border:`1.5px solid ${T.gold}66`, borderRadius:12, padding:"12px 44px 12px 14px", color:T.text, fontSize:15, ...GF, outline:"none", boxSizing:"border-box" }}/>
+        <span style={{ position:"absolute", right:14, top:"50%", transform:"translateY(-50%)", fontSize:18, pointerEvents:"none" }}>🔍</span>
+      </div>
+      {q.length>=2 && results.length===0 && (
+        <div style={{ textAlign:"center", padding:"28px 0", color:T.sub, ...GF, fontSize:14 }}>لا توجد نتائج لـ "{q}"</div>
+      )}
+      {results.length>0 && (
+        <div>
+          <div style={{ color:T.sub, ...GF, fontSize:11, marginBottom:10 }}>{results.length} نتيجة — اضغط لعرض التفاصيل وإجراءات سريعة</div>
+          {results.map((r,i) => (
+            <button key={i} onClick={()=>{ if(r.type==="vehicle") openVehicleCard(r.obj); else if(r.type==="driver") openDriverCard(r.obj); }}
+              style={{ width:"100%", background:T.card2, border:`1px solid ${r.color}33`, borderRadius:12, padding:"12px 14px", marginBottom:8, display:"flex", alignItems:"center", gap:12, cursor:"pointer", borderRight:`3px solid ${r.color}` }}>
+              <span style={{ fontSize:22, flexShrink:0 }}>{r.icon}</span>
+              <div style={{ flex:1, textAlign:"right" }}>
+                <div style={{ color:T.text, ...GF, fontSize:14, fontWeight:700 }}>{r.title}</div>
+                <div style={{ color:T.sub, ...GF, fontSize:12, marginTop:2 }}>{r.sub}</div>
+              </div>
+              <span style={{ color:T.gold, fontSize:18 }}>←</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {q.length<2 && (
+        <div style={{ textAlign:"center", padding:"20px 0" }}>
+          <div style={{ fontSize:40, marginBottom:10 }}>🔍</div>
+          <div style={{ color:T.sub, ...GF, fontSize:13 }}>ابحث عن مركبة أو سائق للاطلاع على ملخص شامل وإجراء عمليات سريعة</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════
+// LOGIN
+// ══════════════════════════════════════════════════
+function LoginScreen({ savedPw, onLogin }) {
+  const [pw, setPw] = useState("");
+  const [err, setErr] = useState("");
+  return (
+    <div style={{ minHeight:"100vh", background:T.bg, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:24, direction:"rtl" }}>
+      <div style={{ position:"absolute", inset:0, background:"radial-gradient(ellipse at 50% 0%, #D4AF3715 0%, transparent 60%)", pointerEvents:"none" }}/>
+      <div style={{ fontSize:56, marginBottom:12 }}>🚗</div>
+      <h1 style={{ color:T.gold, ...GF, fontSize:28, fontWeight:800, margin:0 }}>الأثر الذهبي</h1>
+      <p style={{ color:T.sub, ...GF, fontSize:13, marginTop:6, marginBottom:44 }}>نظام إدارة أسطول المركبات</p>
+      <div style={{ width:"100%", maxWidth:380, background:T.card, borderRadius:24, padding:28, border:`1px solid ${T.border}` }}>
+        <div style={{ background:T.card2, borderRadius:12, padding:"12px 16px", marginBottom:18 }}>
+          <div style={{ color:T.sub, ...GF, fontSize:11, marginBottom:4 }}>اسم المستخدم</div>
+          <div style={{ color:T.text, ...GF, fontSize:15, fontWeight:600 }}>فراس عمران</div>
+        </div>
+        <Field label="كلمة المرور" value={pw} onChange={v=>{ setPw(v); setErr(""); }} type="password" placeholder="أدخل كلمة المرور"/>
+        {err && <p style={{ color:T.red, ...GF, fontSize:13, margin:"0 0 12px", textAlign:"center" }}>{err}</p>}
+        <Btn label="دخول →" onClick={()=>{ if(pw===savedPw) onLogin(); else setErr("كلمة المرور غير صحيحة ❌"); }} full color={T.gold}/>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════
+// MAIN SCREEN
+// ══════════════════════════════════════════════════
+function MainScreen({ onNav, notifications, myPhone, vehicles, violations, handovers, fuelRecords, drivers, maintenanceRecs, saveViolation, saveHandover, saveFuel, saveMaintenance, noteOptions, equipmentList }) {
+  const [showNotif, setShowNotif] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const count = notifications.length;
+
+  // ── Dashboard stats ──
+  const openViol = violations.filter(v=>v.status!=="مسددة").length;
+  const openViolAmt = violations.filter(v=>v.status!=="مسددة").reduce((s,v)=>s+(+v.amount||0),0);
+  const today = new Date(); today.setHours(0,0,0,0);
+  const expiring = vehicles.filter(v=>{
+    const chk = exp => { if(!exp) return false; const d=new Date(exp); d.setHours(0,0,0,0); return (d-today)/86400000<=30; };
+    return chk(v.license_exp)||chk(v.insurance_exp);
+  }).length;
+  const now = new Date();
+  const mKey = now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0");
+  const monthFuel = fuelRecords.filter(r=>r.date&&r.date.startsWith(mKey)).reduce((s,r)=>s+(+r.amount||0),0);
+
+  const tabs = [
+    { id:"myvehicles", icon:"🚗", label:"مركباتي", sub:"ملخص شامل لجميع مركبات الشركة", color:T.gold },
+    { id:"violations", icon:"🚨", label:"المخالفات", sub:"متابعة مخالفات المركبات وتنبيهات الدفع", color:T.red },
+    { id:"license", icon:"📋", label:"الترخيص والتأمين", sub:"تواريخ الانتهاء والتجديد والسجل", color:T.blue },
+    { id:"handover", icon:"🔑", label:"الاستلام والتسليم", sub:"حركة المركبات اليومية وعدة السيارة", color:T.green },
+    { id:"drivers", icon:"👤", label:"السائقون", sub:"سجل السائقين وحالة كل مركبة الآن", color:T.blue },
+    { id:"maintenance", icon:"🔧", label:"الصيانة", sub:"غيار الزيت والفلاتر والبريكات", color:T.orange },
+    { id:"fuel", icon:"⛽", label:"المحروقات", sub:"تعبئة الوقود وتكلفة الكيلومتر", color:T.blue },
+  ];
+
+  const sendPriorityAlerts = () => {
+    const priority = notifications.filter(n => n.priority);
+    if (!priority.length || !myPhone) return;
+    let msg = "🚨 *تنبيهات عاجلة — أسطول الأثر الذهبي*\n\n";
+    priority.forEach(n => { msg += `${n.icon} ${n.title}\n${n.body}\n\n`; });
+    sendWA(myPhone, msg);
+  };
+
+  return (
+    <div style={{ minHeight:"100vh", background:T.bg, direction:"rtl" }}>
+
+      {/* ── Header ── */}
+      <div style={{ background:`linear-gradient(160deg,#1A1A0A 0%,#12120E 55%,${T.bg} 100%)`, padding:"22px 18px 18px", borderBottom:`1px solid rgba(245,197,66,0.1)`, position:"relative", overflow:"hidden" }}>
+        <div style={{ position:"absolute", top:-40, right:-40, width:180, height:180, background:"radial-gradient(circle,rgba(245,197,66,0.07) 0%,transparent 70%)", pointerEvents:"none" }}/>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <div>
+            <h1 style={{ color:T.gold, ...GF, fontSize:21, fontWeight:900, margin:0, letterSpacing:"-0.3px" }}>الأثر الذهبي 🏆</h1>
+            <p style={{ color:T.sub, ...GF, fontSize:11, margin:"4px 0 0", fontWeight:500 }}>نظام إدارة أسطول المركبات</p>
+          </div>
+          <div style={{ display:"flex", gap:8 }}>
+            {myPhone && count>0 && (
+              <button onClick={sendPriorityAlerts} style={{ width:40, height:40, background:T.redSoft, border:`1px solid rgba(239,68,68,0.25)`, color:T.red, borderRadius:8, cursor:"pointer", fontSize:16, display:"flex", alignItems:"center", justifyContent:"center" }}>📲</button>
+            )}
+            <button onClick={()=>setShowSearch(true)} style={{ width:40, height:40, background:T.card2, border:`1px solid ${T.border2}`, color:T.sub2, borderRadius:8, cursor:"pointer", fontSize:17, display:"flex", alignItems:"center", justifyContent:"center" }}>🔍</button>
+            <button onClick={()=>setShowNotif(true)} style={{ width:40, height:40, background:count>0?T.goldGlow:T.card2, border:`1px solid ${count>0?"rgba(245,197,66,0.3)":T.border2}`, color:T.sub2, borderRadius:8, cursor:"pointer", fontSize:17, display:"flex", alignItems:"center", justifyContent:"center", position:"relative" }}>
+              🔔{count>0 && <span style={{ position:"absolute", top:-5, right:-5, background:T.red, color:"#fff", borderRadius:10, fontSize:9, fontWeight:700, width:18, height:18, display:"flex", alignItems:"center", justifyContent:"center", ...GF }}>{count}</span>}
+            </button>
+            <button onClick={()=>onNav("settings")} style={{ width:40, height:40, background:T.card2, border:`1px solid ${T.border2}`, color:T.sub2, borderRadius:8, cursor:"pointer", fontSize:17, display:"flex", alignItems:"center", justifyContent:"center" }}>⚙️</button>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Dashboard Cards ── */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, padding:"14px 14px 6px" }}>
+        {[
+          { nav:"myvehicles", icon:"🚗", value:vehicles.length, label:"إجمالي المركبات", accent:T.gold, accentSoft:T.goldGlow },
+          { nav:"violations", icon:"🚨", value:openViol, label:openViol>0?`${openViolAmt.toFixed(0)} د.أ مستحق`:"مخالفة نشطة", accent:openViol>0?T.red:T.sub, accentSoft:openViol>0?T.redSoft:T.card2 },
+          { nav:"license",    icon:"📋", value:expiring,  label:"تجديد خلال 30 يوم", accent:expiring>0?T.orange:T.sub, accentSoft:expiring>0?T.orangeSoft:T.card2 },
+          { nav:"fuel",       icon:"⛽", value:monthFuel.toFixed(1), label:"د.أ وقود هذا الشهر", accent:T.blue, accentSoft:T.blueSoft },
+        ].map(d => (
+          <button key={d.nav} onClick={()=>onNav(d.nav)} style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:14, padding:"14px 14px 12px", textAlign:"right", cursor:"pointer", position:"relative", overflow:"hidden", boxShadow:T.shadow, transition:"all 0.2s" }}>
+            <div style={{ position:"absolute", top:0, right:0, left:0, height:3, background:d.accent, borderRadius:"14px 14px 0 0" }}/>
+            <div style={{ fontSize:20, marginBottom:8 }}>{d.icon}</div>
+            <div style={{ color:d.accent, fontSize:24, fontWeight:900, ...GF, lineHeight:1 }}>{d.value}</div>
+            <div style={{ color:T.sub, fontSize:11, ...GF, marginTop:4, fontWeight:600 }}>{d.label}</div>
+          </button>
+        ))}
+      </div>
+
+      {/* ── Section Label ── */}
+      <div style={{ color:T.sub, fontSize:10, fontWeight:700, letterSpacing:"0.8px", padding:"14px 18px 8px", ...GF }}>التبويبات</div>
+
+      {/* ── Tab List ── */}
+      <div style={{ padding:"0 14px 24px" }}>
+        {tabs.map(t => (
+          <button key={t.id} onClick={()=>onNav(t.id)}
+            style={{ width:"100%", background:T.card, border:`1px solid ${T.border}`, borderRadius:18, padding:"15px 14px", display:"flex", alignItems:"center", gap:14, cursor:"pointer", textAlign:"right", marginBottom:10, boxShadow:T.shadow, position:"relative", overflow:"hidden", transition:"all 0.2s" }}>
+            <div style={{ position:"absolute", right:0, top:0, bottom:0, width:4, background:t.color, borderRadius:"0 18px 18px 0" }}/>
+            <div style={{ width:46, height:46, background:t.color+"22", borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", fontSize:22, flexShrink:0 }}>{t.icon}</div>
+            <div style={{ flex:1 }}>
+              <div style={{ color:T.text, ...GF, fontSize:15, fontWeight:700 }}>{t.label}</div>
+              <div style={{ color:T.sub, ...GF, fontSize:12, marginTop:3 }}>{t.sub}</div>
+            </div>
+            <span style={{ color:T.sub, fontSize:20 }}>‹</span>
+          </button>
+        ))}
+      </div>
+
+      <Modal show={showNotif} onClose={()=>setShowNotif(false)} title={`🔔 التنبيهات (${count})`}>
+        <NotificationsPanel notes={notifications} onNav={onNav} onClose={()=>setShowNotif(false)}/>
+      </Modal>
+      <Modal show={showSearch} onClose={()=>setShowSearch(false)} title="🔍 البحث العالمي">
+        <GlobalSearch vehicles={vehicles} violations={violations} drivers={drivers} handovers={handovers} fuelRecords={fuelRecords} maintenanceRecs={maintenanceRecs} saveViolation={saveViolation} saveHandover={saveHandover} saveFuel={saveFuel} saveMaintenance={saveMaintenance} noteOptions={noteOptions} equipmentList={equipmentList} onClose={()=>setShowSearch(false)}/>
+      </Modal>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════
+// MY VEHICLES TAB
+// ══════════════════════════════════════════════════
+function MyVehiclesTab({ vehicles, violations, maintenanceRecs, fuelRecords, handovers, saveOneVehicle, onBack }) {
+  const [selVeh, setSelVeh] = useState("");
+  const [showAddVeh, setShowAddVeh] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [addForm, setAddForm] = useState({ plate:"", type:"", make:"", regNum:"", fuelType:"", license_exp:"", insurance_exp:"" });
+  const veh = vehicles.find(v => v.id===selVeh);
+
+  const vViolations = violations.filter(v => v.plate===veh?.plate && v.status!=="مسددة");
+  const vViolAmt = vViolations.reduce((s,v) => s+(+v.amount||0), 0);
+
+  const licStatus = exp => {
+    if (!exp) return { label:"غير مدخل", color:T.sub };
+    try {
+      const expMs = new Date(exp).setHours(0,0,0,0);
+      const todayMs = new Date().setHours(0,0,0,0);
+      if (isNaN(expMs)) return { label:"غير مدخل", color:T.sub };
+      const diff = Math.floor((expMs - todayMs) / 86400000);
+      if (diff < 0) return { label:"منتهي", color:T.red };
+      if (diff <= 14) return { label:`${diff} يوم`, color:diff<=3?T.red:T.orange };
+      return { label:"ساري", color:T.green };
+    } catch(e) { return { label:"غير مدخل", color:T.sub }; }
+  };
+
+  const lastHandover = handovers.filter(h=>h.vehicleId===selVeh).sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
+  const maintRecs = maintenanceRecs.filter(r=>r.vehicleId===selVeh).sort((a,b)=>a.oilKm-b.oilKm);
+  const lastMaint = maintRecs[maintRecs.length-1];
+  const fRecs = fuelRecords.filter(r=>r.vehicleId===selVeh).sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const lastFuel = fRecs[0];
+  const avgCost = fRecs.length ? (fRecs.reduce((s,r)=>s+(r.costPerKm||0),0)/fRecs.length).toFixed(3) : null;
+
+  // عداد المسافة الشهري
+  const calcMonthlyKm = (vId) => {
+    const recs = fuelRecords.filter(r=>r.vehicleId===vId && r.currKm).sort((a,b)=>new Date(a.date)-new Date(b.date));
+    if (!recs.length) return null;
+    const now = new Date();
+    const mk = d => { const dt=new Date(d); return dt.getFullYear()+"-"+String(dt.getMonth()+1).padStart(2,"0"); };
+    const thisKey = now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0");
+    const ld = new Date(now.getFullYear(), now.getMonth()-1, 1);
+    const lastKey = ld.getFullYear()+"-"+String(ld.getMonth()+1).padStart(2,"0");
+    const monthMax = {}, monthMin = {};
+    recs.forEach(r => { const k=mk(r.date); if(!monthMax[k]||r.currKm>monthMax[k]) monthMax[k]=r.currKm; if(!monthMin[k]||r.currKm<monthMin[k]) monthMin[k]=r.currKm; });
+    const monthKeys = Object.keys(monthMax).sort();
+    const monthDist = {};
+    for (let i=0; i<monthKeys.length; i++) {
+      const k = monthKeys[i];
+      if (i===0) { const d=monthMax[k]-(monthMin[k]||monthMax[k]); if(d>0) monthDist[k]=d; }
+      else { monthDist[k]=monthMax[k]-monthMax[monthKeys[i-1]]; }
+    }
+    if ((monthDist[thisKey]==null||monthDist[thisKey]===0) && monthMax[thisKey]!=null) {
+      const d=monthMax[thisKey]-(monthMin[thisKey]||monthMax[thisKey]);
+      monthDist[thisKey]=d;
+    }
+    const history = monthKeys.slice(-6).filter(k=>monthDist[k]!=null&&monthDist[k]>=0).map(k=>({ key:k, label:new Date(k+"-01").toLocaleDateString("ar-JO",{month:"short",year:"numeric"}), km:monthDist[k] }));
+    return { thisMonth:monthDist[thisKey]??null, lastMonth:monthDist[lastKey]??null, history };
+  };
+  const monthlyKm = selVeh ? calcMonthlyKm(selVeh) : null;
+
+  const IR = ({ label, value, color=T.text }) => (
+    <div style={{ display:"flex", justifyContent:"space-between", padding:"9px 0", borderBottom:`1px solid ${T.border}` }}>
+      <span style={{ color:T.sub, ...GF, fontSize:13 }}>{label}</span>
+      <span style={{ color, ...GF, fontSize:13, fontWeight:600 }}>{value}</span>
+    </div>
+  );
+
+  const Section = ({ title, color, children }) => (
+    <div style={{ background:T.card, borderRadius:16, padding:"14px 16px", marginBottom:12, borderRight:`4px solid ${color}` }}>
+      <div style={{ color:T.text, ...GF, fontWeight:700, fontSize:15, marginBottom:10 }}>{title}</div>
+      {children}
+    </div>
+  );
+
+  return (
+    <div style={{ minHeight:"100vh", background:T.bg, direction:"rtl", paddingBottom:40 }}>
+      <Header title="🚗 مركباتي" onBack={onBack}/>
+      <VehicleSelector vehicles={vehicles} selected={selVeh} onChange={setSelVeh}/>
+
+      {/* زر إضافة مركبة */}
+      <div style={{ padding:"8px 14px 0" }}>
+        <button onClick={()=>setShowAddVeh(true)}
+          style={{ width:"100%", background:T.card, border:`1.5px dashed ${T.gold}66`, borderRadius:14, padding:"12px", color:T.gold, ...GF, fontSize:14, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
+          <span style={{ fontSize:20 }}>+</span> إضافة مركبة جديدة
+        </button>
+      </div>
+      {!selVeh && <div style={{ textAlign:"center", padding:60, color:T.sub, ...GF, fontSize:15 }}>اختر مركبة لعرض ملخصها الشامل</div>}
+      {veh && (
+        <div style={{ padding:"14px 14px" }}>
+          <div style={{ background:T.card, borderRadius:16, padding:"16px", marginBottom:14, borderTop:`3px solid ${T.gold}` }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4 }}>
+              <div style={{ color:T.gold, ...GF, fontSize:18, fontWeight:800 }}>{veh.plate}</div>
+              {veh.fuelType==="electric" && <Badge label="⚡ كهربائية" color={T.green}/>}
+              {veh.fuelType==="hybrid" && <Badge label="🔋 هايبرد" color={T.blue}/>}
+            </div>
+            <div style={{ color:T.sub, ...GF, fontSize:13 }}>{[veh.type,veh.make,veh.regNum].filter(Boolean).join(" | ")||"—"}</div>
+          </div>
+
+          <Section title="🚨 المخالفات" color={T.red}>
+            <div style={{ display:"flex", gap:8 }}>
+              <div style={{ flex:1, background:T.card2, borderRadius:10, padding:"8px 12px", textAlign:"center" }}>
+                <div style={{ color:T.red, ...GF, fontSize:20, fontWeight:700 }}>{vViolations.length}</div>
+                <div style={{ color:T.sub, ...GF, fontSize:11 }}>مخالفة نشطة</div>
+              </div>
+              <div style={{ flex:1, background:T.card2, borderRadius:10, padding:"8px 12px", textAlign:"center" }}>
+                <div style={{ color:T.orange, ...GF, fontSize:18, fontWeight:700 }}>{vViolAmt.toFixed(0)}</div>
+                <div style={{ color:T.sub, ...GF, fontSize:11 }}>د.أ إجمالي</div>
+              </div>
+            </div>
+          </Section>
+
+          <Section title="📋 الترخيص والتأمين" color={T.blue}>
+            <IR label="الترخيص" value={veh.license_exp?toDateStr(veh.license_exp):"غير مدخل"} color={licStatus(veh.license_exp).color}/>
+            <IR label="حالة الترخيص" value={licStatus(veh.license_exp).label} color={licStatus(veh.license_exp).color}/>
+            <IR label="التأمين" value={veh.insurance_exp?toDateStr(veh.insurance_exp):"غير مدخل"} color={licStatus(veh.insurance_exp).color}/>
+            <IR label="حالة التأمين" value={licStatus(veh.insurance_exp).label} color={licStatus(veh.insurance_exp).color}/>
+          </Section>
+
+          <Section title="🔑 آخر استلام/تسليم" color={T.green}>
+            {lastHandover ? <>
+              <IR label="النوع" value={lastHandover.type} color={lastHandover.type==="استلام"?T.blue:T.green}/>
+              <IR label="السائق" value={lastHandover.driver}/>
+              <IR label="التاريخ" value={`${toDateStr(lastHandover.date)} ${fmt12(lastHandover.date)}`}/>
+            </> : <div style={{ color:T.sub, ...GF, fontSize:13 }}>لا يوجد سجل</div>}
+          </Section>
+
+          <Section title="🔧 الصيانة" color={T.orange}>
+            {lastMaint ? <>
+              <IR label="آخر غيار زيت" value={`${lastMaint.oilKm?.toLocaleString()} كلم`}/>
+              <IR label="الغيار القادم" value={`${lastMaint.nextOilKm?.toLocaleString()} كلم`} color={T.orange}/>
+            </> : <div style={{ color:T.sub, ...GF, fontSize:13 }}>لا يوجد سجل صيانة</div>}
+          </Section>
+
+          <Section title="⛽ المحروقات" color={T.blue}>
+            {lastFuel ? <>
+              <IR label="آخر تعبئة" value={toDateStr(lastFuel.date)}/>
+              <IR label="العداد الحالي" value={`${lastFuel.currKm?.toLocaleString()} كلم`} color={T.gold}/>
+              <IR label="متوسط تكلفة الكلم" value={avgCost?`${avgCost} د.أ`:"—"} color={T.green}/>
+            </> : <div style={{ color:T.sub, ...GF, fontSize:13 }}>لا يوجد سجل محروقات</div>}
+          </Section>
+
+          {/* عداد المسافة الشهري */}
+          {monthlyKm && (monthlyKm.thisMonth!==null || monthlyKm.history.length>0) && (
+            <Section title="📏 المسافة الشهرية" color={T.green}>
+              {/* هذا الشهر vs الشهر الماضي */}
+              <div style={{ display:"flex", gap:8, marginBottom:12 }}>
+                <div style={{ flex:1, background:T.card2, borderRadius:12, padding:"10px 12px", textAlign:"center" }}>
+                  <div style={{ color:T.sub, ...GF, fontSize:10, marginBottom:4 }}>هذا الشهر</div>
+                  <div style={{ color:T.green, ...GF, fontSize:20, fontWeight:800 }}>
+                    {monthlyKm.thisMonth!=null ? monthlyKm.thisMonth.toLocaleString() : "—"}
+                  </div>
+                  <div style={{ color:T.sub, ...GF, fontSize:10 }}>كلم</div>
+                </div>
+                <div style={{ flex:1, background:T.card2, borderRadius:12, padding:"10px 12px", textAlign:"center" }}>
+                  <div style={{ color:T.sub, ...GF, fontSize:10, marginBottom:4 }}>الشهر الماضي</div>
+                  <div style={{ color:T.blue, ...GF, fontSize:20, fontWeight:800 }}>
+                    {monthlyKm.lastMonth!=null ? monthlyKm.lastMonth.toLocaleString() : "—"}
+                  </div>
+                  <div style={{ color:T.sub, ...GF, fontSize:10 }}>كلم</div>
+                </div>
+                {monthlyKm.thisMonth!=null && monthlyKm.lastMonth!=null && monthlyKm.lastMonth>0 && (() => {
+                  const diff = monthlyKm.thisMonth - monthlyKm.lastMonth;
+                  const pct = Math.round((diff/monthlyKm.lastMonth)*100);
+                  const up = diff >= 0;
+                  return (
+                    <div style={{ flex:1, background:up?T.orange+"22":T.green+"22", borderRadius:12, padding:"10px 12px", textAlign:"center", border:`1px solid ${up?T.orange:T.green}44` }}>
+                      <div style={{ color:T.sub, ...GF, fontSize:10, marginBottom:4 }}>التغيير</div>
+                      <div style={{ color:up?T.orange:T.green, ...GF, fontSize:18, fontWeight:800 }}>{up?"▲":"▼"} {Math.abs(pct)}%</div>
+                      <div style={{ color:T.sub, ...GF, fontSize:10 }}>{up?"زيادة":"انخفاض"}</div>
+                    </div>
+                  );
+                })()}
+              </div>
+              {/* رسم بياني نصي للأشهر الستة الأخيرة */}
+              {monthlyKm.history.length > 1 && (() => {
+                const maxKm = Math.max(...monthlyKm.history.map(h=>h.km));
+                return (
+                  <div>
+                    <div style={{ color:T.sub, ...GF, fontSize:11, marginBottom:8 }}>آخر {monthlyKm.history.length} أشهر</div>
+                    {monthlyKm.history.map(h => {
+                      const pct = maxKm > 0 ? (h.km/maxKm)*100 : 0;
+                      const now = new Date();
+                      const thisKey = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
+                      const isCurrent = h.key === thisKey;
+                      return (
+                        <div key={h.key} style={{ marginBottom:8 }}>
+                          <div style={{ display:"flex", justifyContent:"space-between", marginBottom:3 }}>
+                            <span style={{ color:isCurrent?T.gold:T.sub, ...GF, fontSize:11, fontWeight:isCurrent?700:400 }}>{h.label}{isCurrent?" ◀":""}</span>
+                            <span style={{ color:isCurrent?T.gold:T.text, ...GF, fontSize:11, fontWeight:700 }}>{h.km.toLocaleString()} كلم</span>
+                          </div>
+                          <div style={{ background:T.card3, borderRadius:6, height:8, overflow:"hidden" }}>
+                            <div style={{ background:isCurrent?T.gold:T.green, width:`${pct}%`, height:"100%", borderRadius:6, transition:"width 0.3s" }}/>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </Section>
+          )}
+        </div>
+      )}
+
+      {/* Modal: إضافة مركبة يدوياً */}
+      <Modal show={showAddVeh} onClose={()=>{ setShowAddVeh(false); setAddForm({ plate:"", type:"", make:"", regNum:"", fuelType:"", license_exp:"", insurance_exp:"" }); }} title="➕ إضافة مركبة جديدة">
+        <Field label="رقم اللوحة *" value={addForm.plate} onChange={v=>setAddForm(f=>({...f,plate:v}))} req/>
+        <Field label="نوع المركبة" value={addForm.type} onChange={v=>setAddForm(f=>({...f,type:v}))} placeholder="مثال: شاحنة / بيك أب / سيدان"/>
+        <Field label="الصنع / الماركة" value={addForm.make} onChange={v=>setAddForm(f=>({...f,make:v}))} placeholder="مثال: تويوتا / هيونداي"/>
+        <Field label="رقم التسجيل" value={addForm.regNum} onChange={v=>setAddForm(f=>({...f,regNum:v}))}/>
+        <div style={{ marginBottom:14 }}>
+          <label style={{ color:T.sub, fontSize:12, ...GF, display:"block", marginBottom:6 }}>نوع الوقود</label>
+          <select value={addForm.fuelType} onChange={e=>setAddForm(f=>({...f,fuelType:e.target.value}))}
+            style={{ width:"100%", background:T.card2, border:`1px solid ${T.border}`, borderRadius:10, padding:"11px 14px", color:T.text, fontSize:14, ...GF, boxSizing:"border-box", outline:"none" }}>
+            <option value="">بنزين / ديزل</option>
+            <option value="electric">⚡ كهربائية</option>
+            <option value="hybrid">🔋 هايبرد</option>
+          </select>
+        </div>
+        <Field label="تاريخ انتهاء الترخيص" value={addForm.license_exp} onChange={v=>setAddForm(f=>({...f,license_exp:v}))} type="date"/>
+        <Field label="تاريخ انتهاء التأمين" value={addForm.insurance_exp} onChange={v=>setAddForm(f=>({...f,insurance_exp:v}))} type="date"/>
+        <Btn label={saving?"جارٍ الحفظ...":"✓ حفظ المركبة"} disabled={saving||!addForm.plate} onClick={async()=>{
+          if (!addForm.plate||saving) return;
+          setSaving(true);
+          await saveOneVehicle({ ...addForm, id:uid(), renewHistory:[] });
+          setAddForm({ plate:"", type:"", make:"", regNum:"", fuelType:"", license_exp:"", insurance_exp:"" });
+          setShowAddVeh(false);
+          setSaving(false);
+        }} full color={T.gold}/>
+      </Modal>
+    </div>
+  );
+}
+// ══════════════════════════════════════════════════
+function ViolationsTab({ violations, saveViolations, vehicles, noteOptions, myPhone, onBack }) {
+  const [view, setView] = useState("active");
+  const [selVeh, setSelVeh] = useState("");
+  const [showAdd, setShowAdd] = useState(false);
+  const [detail, setDetail] = useState(null);
+  const [selected, setSelected] = useState([]);
+  const [search, setSearch] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ plate:"", driver:"", vdate:todayISO(), vtype:"", vtypeOther:"", vnum:"", amount:"", note:"" });
+
+  const daysLeft = v => 30 - daysDiff(v.vdate);
+  const statusOf = v => {
+    if (v.status==="مسددة") return { label:"مسددة", color:T.green };
+    if (v.status==="انتظار") return { label:"انتظار", color:T.orange };
+    const r = daysLeft(v);
+    if (r<=0) return { label:"انتهت المهلة", color:T.red };
+    return { label:"مفتوحة", color:T.yellow };
+  };
+
+  const filterByView = v => {
+    if (view==="active") return v.status!=="مسددة" && v.status!=="انتظار";
+    if (view==="waiting") return v.status==="انتظار";
+    if (view==="archive") return v.status==="مسددة";
+    return true;
+  };
+
+  const displayed = violations.filter(v => {
+    if (!filterByView(v)) return false;
+    if (selVeh) { const veh=vehicles.find(x=>x.id===selVeh); if(veh && v.plate!==veh.plate) return false; }
+    if (search && !v.plate.includes(search) && !v.driver.includes(search) && !(v.vnum||"").includes(search)) return false;
+    if (dateFrom && v.vdate < dateFrom) return false;
+    if (dateTo && v.vdate > dateTo) return false;
+    return true;
+  });
+
+  const active = violations.filter(v => v.status!=="مسددة" && v.status!=="انتظار");
+  const waiting = violations.filter(v => v.status==="انتظار");
+  const totalAmt = active.reduce((s,v) => s+(+v.amount||0), 0);
+  const savingAmt = active.filter(v=>daysLeft(v)>0).reduce((s,v) => s+(+v.amount||0)*0.3, 0);
+  const weekAlert = active.filter(v => { const r=daysLeft(v); return r>0&&r<=7; }).length;
+
+  const driverMap = {};
+  violations.filter(v=>v.status!=="مسددة").forEach(v => { if(v.driver) driverMap[v.driver]=(driverMap[v.driver]||0)+1; });
+  const topDriver = Object.entries(driverMap).sort((a,b) => b[1]-a[1])[0];
+
+  const vehViolCount = id => {
+    const veh = vehicles.find(v => v.id===id);
+    if (!veh) return 0;
+    return violations.filter(v => v.plate===veh.plate && v.status!=="مسددة").length;
+  };
+
+  const addViolation = async () => {
+    if (!form.plate||!form.driver||!form.vdate||!form.vtype||!form.amount) return;
+    if (saving) return;
+    setSaving(true);
+    const finalType = form.vtype==="أخرى" && form.vtypeOther ? form.vtypeOther : form.vtype;
+    const newV = { ...form, vtype:finalType, id:uid(), status:"مفتوحة", created:new Date().toISOString() };
+    await saveViolations(newV);
+    setForm({ plate:"", driver:"", vdate:todayISO(), vtype:"", vtypeOther:"", vnum:"", amount:"", note:"" });
+    setShowAdd(false);
+    setSaving(false);
+  };
+
+  const markPaid = async id => {
+    const v = violations.find(x=>x.id===id);
+    await saveViolations({...v, status:"مسددة", paidDate:new Date().toISOString()});
+    setDetail(null);
+  };
+
+  const sendToAccounting = async () => {
+    const items = violations.filter(v => selected.includes(v.id));
+    let msg = "📋 *تقرير المخالفات — الأثر الذهبي*\n\n";
+    items.forEach((v,i) => { msg += `${i+1}. لوحة: ${v.plate} | السائق: ${v.driver}\n   التاريخ: ${toDateStr(v.vdate)} | النوع: ${v.vtype}\n   المبلغ: ${v.amount} د.أ | المتبقي: ${daysLeft(v)} يوم\n\n`; });
+    for(const v of items){ await saveViolations({...v, status:"انتظار", sentDate:new Date().toISOString()}); }
+    setSelected([]);
+    if (myPhone) sendWA(myPhone, msg);
+    else showToast("⚠️ لم يُحفظ رقم الهاتف في الإعدادات", T.orange);
+  };
+
+  const exportExcel = () => {
+    // CSV export - works on all Android browsers
+    const headers = ["رقم المركبة","الموظف المسؤول","رقم المخالفة","تاريخ المخالفة","قيمة المخالفة","وصف المخالفة","الحالة"];
+    const rows = displayed.map(v => [
+      v.plate, v.driver, v.vnum||"—",
+      toDateStr(v.vdate), v.amount, v.vtype,
+      statusOf(v).label
+    ]);
+    const csv = [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(",")).join("\n");
+    const blob = new Blob(["\uFEFF"+csv], { type:"text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `violations_${todayISO()}.csv`;
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+  };
+
+  return (
+    <div style={{ minHeight:"100vh", background:T.bg, direction:"rtl", paddingBottom:40 }}>
+      <Header title="🚨 المخالفات" onBack={onBack}
+        right={<button onClick={()=>setShowAdd(true)} style={{ background:T.gold, color:"#000", border:"none", borderRadius:8, padding:"7px 14px", ...GF, fontSize:13, fontWeight:700, cursor:"pointer" }}>+ إضافة</button>}
+      />
+
+      {/* ── Summary Row ── */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, padding:"14px 14px 0" }}>
+        {[
+          { label:"نشطة", value:active.length, color:T.red },
+          { label:"إجمالي المستحق", value:`${totalAmt.toFixed(0)} د.أ`, color:T.orange },
+          { label:"ينتهي هذا الأسبوع", value:weekAlert, color:weekAlert>0?T.red:T.sub },
+        ].map((s,i) => (
+          <div key={i} style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:12, padding:"10px 12px", textAlign:"center", boxShadow:T.shadow }}>
+            <div style={{ color:s.color, ...GF, fontSize:17, fontWeight:900 }}>{s.value}</div>
+            <div style={{ color:T.sub, ...GF, fontSize:10, marginTop:3, fontWeight:600 }}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {topDriver && (
+        <div style={{ margin:"10px 14px 0", background:T.redSoft, borderRadius:12, padding:"10px 14px", display:"flex", alignItems:"center", gap:10, border:`1px solid rgba(239,68,68,0.2)` }}>
+          <span style={{ fontSize:18 }}>⚠️</span>
+          <div style={{ ...GF, fontSize:12 }}><span style={{ color:T.sub }}>الأكثر مخالفةً: </span><span style={{ color:T.red, fontWeight:700 }}>{topDriver[0]}</span><span style={{ color:T.sub }}> ({topDriver[1]})</span></div>
+        </div>
+      )}
+
+      {/* ── Filter chips ── */}
+      <div style={{ padding:"12px 14px 0", display:"flex", gap:7, overflowX:"auto" }}>
+        {[{v:"active",l:"النشطة"},{v:"waiting",l:`انتظار (${waiting.length})`},{v:"archive",l:"الأرشيف"}].map(f => (
+          <button key={f.v} onClick={()=>setView(f.v)}
+            style={{ background:view===f.v?T.redSoft:T.card2, color:view===f.v?T.red:T.sub2, border:`1px solid ${view===f.v?"rgba(239,68,68,0.3)":T.border}`, borderRadius:20, padding:"7px 16px", ...GF, fontSize:12, fontWeight:700, cursor:"pointer", whiteSpace:"nowrap" }}>{f.l}</button>
+        ))}
+        <select value={selVeh} onChange={e=>setSelVeh(e.target.value)}
+          style={{ background:selVeh?T.goldGlow:T.card2, border:`1px solid ${selVeh?"rgba(245,197,66,0.3)":T.border}`, borderRadius:20, padding:"7px 14px", color:selVeh?T.gold:T.sub2, fontSize:12, ...GF, outline:"none", cursor:"pointer" }}>
+          <option value="">كل المركبات</option>
+          {vehicles.map(v => { const cnt=vehViolCount(v.id); return <option key={v.id} value={v.id}>{v.plate}{cnt>0?` (${cnt})`:""}</option>; })}
+        </select>
+      </div>
+
+      {/* ── Search ── */}
+      <div style={{ padding:"10px 14px 0" }}>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 بحث باللوحة أو السائق..."
+          style={{ width:"100%", background:T.card2, border:`1px solid ${T.border}`, borderRadius:10, padding:"10px 14px", color:T.text, fontSize:13, ...GF, boxSizing:"border-box", outline:"none" }}/>
+      </div>
+
+      {/* ── Actions ── */}
+      {(displayed.length>0 || selected.length>0) && (
+        <div style={{ padding:"8px 14px 0", display:"flex", gap:8 }}>
+          {displayed.length>0 && <Btn label="📊 تصدير" onClick={exportExcel} sm color={T.green} outline/>}
+          {selected.length>0 && <Btn label={`📤 إرسال للمحاسبة (${selected.length})`} onClick={sendToAccounting} sm color={T.orange}/>}
+        </div>
+      )}
+
+      {/* ── List ── */}
+      <div style={{ padding:"12px 14px" }}>
+        {displayed.length===0 && (
+          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", padding:"50px 30px", textAlign:"center" }}>
+            <div style={{ width:80, height:80, background:T.card2, border:`2px dashed ${T.border2}`, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:34, marginBottom:20 }}>🚨</div>
+            <div style={{ color:T.text, ...GF, fontSize:16, fontWeight:800, marginBottom:8 }}>لا توجد مخالفات</div>
+            <div style={{ color:T.sub, ...GF, fontSize:13, marginBottom:24 }}>{view==="active"?"لا توجد مخالفات نشطة حالياً":view==="archive"?"لا توجد مخالفات مسددة":"لا توجد مخالفات قيد الانتظار"}</div>
+            <button onClick={()=>setShowAdd(true)} style={{ background:T.gold, color:"#000", border:"none", borderRadius:12, padding:"12px 24px", ...GF, fontSize:14, fontWeight:800, cursor:"pointer" }}>+ إضافة مخالفة</button>
+          </div>
+        )}
+        {displayed.map(v => {
+          const s = statusOf(v), r = daysLeft(v), isSel = selected.includes(v.id);
+          const isPaid = v.status==="مسددة";
+          return (
+            <div key={v.id} style={{ background:T.card, borderRadius:16, marginBottom:10, border:`1px solid ${T.border}`, boxShadow:T.shadow, overflow:"hidden", opacity:isPaid?0.7:1 }}>
+              {/* Card Header */}
+              <div style={{ background:isPaid?T.greenSoft:T.redSoft, borderBottom:`1px solid ${isPaid?"rgba(34,197,94,0.1)":"rgba(239,68,68,0.1)"}`, padding:"12px 14px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                  {view==="active" && (
+                    <input type="checkbox" checked={isSel} onChange={()=>setSelected(isSel?selected.filter(i=>i!==v.id):[...selected,v.id])}
+                      style={{ width:16, height:16, accentColor:T.gold, flexShrink:0 }}/>
+                  )}
+                  <div>
+                    <div style={{ color:T.gold, ...GF, fontWeight:900, fontSize:15 }}>{v.plate}</div>
+                    <div style={{ color:T.sub, ...GF, fontSize:11, marginTop:2 }}>👤 {v.driver} · {toDateStr(v.vdate)}</div>
+                  </div>
+                </div>
+                <Badge label={s.label} color={s.color}/>
+              </div>
+              {/* Card Body */}
+              <div style={{ padding:"12px 14px" }} onClick={()=>setDetail(v)}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+                  <span style={{ color:T.sub2, ...GF, fontSize:13 }}>{v.vtype}</span>
+                  <div><span style={{ color:isPaid?T.green:T.red, ...GF, fontSize:18, fontWeight:900 }}>{v.amount}</span><span style={{ color:T.sub, ...GF, fontSize:12 }}> د.أ</span></div>
+                </div>
+                {v.status!=="مسددة" && r>0 && (
+                  <div style={{ background:T.card2, borderRadius:10, padding:"8px 10px" }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", marginBottom:5 }}>
+                      <span style={{ color:T.sub, ...GF, fontSize:11 }}>المتبقي من مهلة الخصم</span>
+                      <span style={{ color:s.color, ...GF, fontSize:12, fontWeight:700 }}>{r} يوم</span>
+                    </div>
+                    <div style={{ background:T.border, borderRadius:4, height:4 }}>
+                      <div style={{ background:s.color, height:4, borderRadius:4, width:`${Math.max(3,(r/30)*100)}%` }}/>
+                    </div>
+                  </div>
+                )}
+              </div>
+              {/* Card Footer */}
+              {!isPaid && (
+                <div style={{ borderTop:`1px solid ${T.border}`, padding:"10px 14px", display:"flex", gap:8 }}>
+                  <button onClick={()=>markPaid(v.id)} style={{ flex:1, background:T.greenSoft, border:`1px solid rgba(34,197,94,0.2)`, color:T.green, borderRadius:8, padding:"8px", ...GF, fontSize:12, fontWeight:700, cursor:"pointer" }}>✓ تسديد</button>
+                  {myPhone && <button onClick={()=>{ let msg=`🚨 *تنبيه مخالفة*\nالمركبة: ${v.plate}\nالسائق: ${v.driver}\nالمخالفة: ${v.vtype}\nالمبلغ: ${v.amount} د.أ\nالتاريخ: ${toDateStr(v.vdate)}`; sendWA(myPhone,msg); }} style={{ flex:1, background:T.blueSoft, border:`1px solid rgba(96,165,250,0.2)`, color:T.blue, borderRadius:8, padding:"8px", ...GF, fontSize:12, fontWeight:700, cursor:"pointer" }}>📲 إشعار</button>}
+                  <button onClick={()=>setDetail(v)} style={{ flex:1, background:T.card2, border:`1px solid ${T.border}`, color:T.sub2, borderRadius:8, padding:"8px", ...GF, fontSize:12, fontWeight:700, cursor:"pointer" }}>التفاصيل</button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Add Modal */}
+      <Modal show={showAdd} onClose={()=>setShowAdd(false)} title="إضافة مخالفة جديدة">
+        <div style={{ marginBottom:14 }}>
+          <label style={{ color:T.sub, fontSize:12, ...GF, display:"block", marginBottom:6 }}>رقم المركبة *</label>
+          <select value={form.plate} onChange={e=>setForm({...form,plate:e.target.value})}
+            style={{ width:"100%", background:T.card2, border:`1px solid ${T.border}`, borderRadius:10, padding:"11px 14px", color:form.plate?T.text:T.sub, fontSize:14, ...GF, boxSizing:"border-box", outline:"none" }}>
+            <option value="">— اختر المركبة —</option>
+            {vehicles.map(v => <option key={v.id} value={v.plate}>{v.plate}{v.type?` — ${v.type}`:""}</option>)}
+          </select>
+        </div>
+        <Field label="الموظف المسؤول" value={form.driver} onChange={v=>setForm({...form,driver:v})} req/>
+        <Field label="تاريخ المخالفة" value={form.vdate} onChange={v=>setForm({...form,vdate:v})} type="date" req/>
+        <FieldSelect label="تصنيف المخالفة" value={form.vtype} onChange={v=>setForm({...form,vtype:v})} opts={VTYPES} req/>
+        {form.vtype==="أخرى" && <Field label="اكتب نوع المخالفة" value={form.vtypeOther} onChange={v=>setForm({...form,vtypeOther:v})} placeholder="اكتب وصف المخالفة..." req/>}
+        <Field label="رقم المخالفة (اختياري)" value={form.vnum} onChange={v=>setForm({...form,vnum:v})}/>
+        <Field label="قيمة المخالفة (د.أ)" value={form.amount} onChange={v=>setForm({...form,amount:v})} type="number" req/>
+        <FieldSelect label="ملاحظات (اختياري)" value={form.note} onChange={v=>setForm({...form,note:v})} opts={noteOptions}/>
+        <Btn label={saving?"جارٍ الحفظ...":"✓ حفظ المخالفة"} onClick={addViolation} full color={T.gold} disabled={saving}/>
+      </Modal>
+
+      {/* Detail Modal */}
+      <Modal show={!!detail} onClose={()=>setDetail(null)} title="تفاصيل المخالفة">
+        {detail && (() => {
+          const disc = (+detail.amount*0.7).toFixed(2), save_ = (+detail.amount*0.3).toFixed(2);
+          return (
+            <div>
+              {[
+                { icon:"📅", label:"تاريخ المخالفة", date:detail.vdate },
+                detail.sentDate && { icon:"📤", label:"أُرسلت للمحاسبة", date:detail.sentDate },
+                detail.paidDate && { icon:"✅", label:"تاريخ السداد", date:detail.paidDate },
+              ].filter(Boolean).map((x,i) => (
+                <div key={i} style={{ display:"flex", gap:12, alignItems:"center", marginBottom:12, background:T.card2, borderRadius:10, padding:"8px 12px" }}>
+                  <span style={{ fontSize:20 }}>{x.icon}</span>
+                  <div><div style={{ color:T.sub, ...GF, fontSize:11 }}>{x.label}</div><div style={{ color:T.text, ...GF, fontSize:14 }}>{toDateStr(x.date)}</div></div>
+                </div>
+              ))}
+              <div style={{ background:T.card2, borderRadius:12, padding:16, margin:"16px 0" }}>
+                {[["رقم اللوحة",detail.plate],["الموظف",detail.driver],["نوع المخالفة",detail.vtype],
+                  ["رقم المخالفة",detail.vnum||"—"],["المبلغ الأصلي",`${detail.amount} د.أ`],
+                  ["بعد خصم 30%",`${disc} د.أ`],["الوفر",`${save_} د.أ`],["الملاحظة",detail.note||"—"],
+                ].map(([k,v]) => (
+                  <div key={k} style={{ display:"flex", justifyContent:"space-between", padding:"8px 0", borderBottom:`1px solid ${T.border}` }}>
+                    <span style={{ color:T.sub, ...GF, fontSize:13 }}>{k}</span>
+                    <span style={{ color:T.text, ...GF, fontSize:13, fontWeight:600 }}>{v}</span>
+                  </div>
+                ))}
+              </div>
+              {detail.status!=="مسددة" && <Btn label="✅ تم السداد" onClick={()=>markPaid(detail.id)} full color={T.green}/>}
+            </div>
+          );
+        })()}
+      </Modal>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════
+// LICENSE TAB
+// ══════════════════════════════════════════════════
+function LicenseTab({ vehicles, saveVehicles, saveOneVehicle, onBack }) {
+  const [selVeh, setSelVeh] = useState("");
+  const [showAdd, setShowAdd] = useState(false);
+  const [detail, setDetail] = useState(null);
+  const [renewing, setRenewing] = useState(null);
+  const [search, setSearch] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [quickIns, setQuickIns] = useState({});
+  const [form, setForm] = useState({ plate:"", type:"", fuelType:"", license_exp:"", insurance_exp:"" });
+  const [rForm, setRForm] = useState({ kind:"ترخيص", date:"", amount:"" });
+
+  const statusOf = exp => {
+    if (!exp) return { label:"غير مدخل", color:T.sub };
+    try {
+      const expMs = new Date(exp).setHours(0,0,0,0);
+      const todayMs = new Date().setHours(0,0,0,0);
+      if (isNaN(expMs)) return { label:"غير مدخل", color:T.sub };
+      const diff = Math.floor((expMs - todayMs) / 86400000);
+      if (diff < 0) return { label:"منتهي", color:T.red };
+      if (diff <= 3) return { label:`${diff} أيام — شديد`, color:T.red };
+      if (diff <= 7) return { label:`${diff} أيام — عالي`, color:T.orange };
+      if (diff <= 14) return { label:`${diff} يوم — تنبيه`, color:T.yellow };
+      return { label:"ساري", color:T.green };
+    } catch(e) { return { label:"غير مدخل", color:T.sub }; }
+  };
+
+  const worstColor = v => {
+    const order = [T.red, T.orange, T.yellow, T.green, T.sub];
+    const ls = statusOf(v.license_exp), is = statusOf(v.insurance_exp);
+    return order.indexOf(ls.color) < order.indexOf(is.color) ? ls.color : is.color;
+  };
+
+  const green = vehicles.filter(v => worstColor(v)===T.green).length;
+  const warn = vehicles.filter(v => [T.yellow,T.orange].includes(worstColor(v))).length;
+  const expd = vehicles.filter(v => worstColor(v)===T.red).length;
+
+  const displayed = vehicles.filter(v => {
+    if (selVeh && v.id!==selVeh) return false;
+    if (search && !v.plate.includes(search) && !v.type?.includes(search)) return false;
+    return true;
+  });
+
+  const updateField = async (vehId, field, val) => { const veh=vehicles.find(v=>v.id===vehId); await saveOneVehicle({...veh,[field]:val}); };
+  const addVehicle = async () => { if (!form.plate||saving) return; setSaving(true); await saveOneVehicle({...form,id:uid(),regNum:"",make:"",renewHistory:[]}); setForm({plate:"",type:"",fuelType:"",license_exp:"",insurance_exp:""}); setShowAdd(false); setSaving(false); };
+  const doRenew = async () => {
+    if (!rForm.kind||!rForm.date||saving) return;
+    setSaving(true);
+    const veh = vehicles.find(v=>v.id===renewing.id);
+    const h = [...(veh.renewHistory||[]), {...rForm, addedAt:new Date().toISOString()}];
+    const up = {...veh, renewHistory:h};
+    if (rForm.kind==="ترخيص") up.license_exp = rForm.date; else up.insurance_exp = rForm.date;
+    await saveOneVehicle(up);
+    setRenewing(null); setRForm({ kind:"ترخيص", date:"", amount:"" }); setSaving(false);
+  };
+
+  return (
+    <div style={{ minHeight:"100vh", background:T.bg, direction:"rtl", paddingBottom:40 }}>
+      <Header title="📋 الترخيص والتأمين" onBack={onBack}/>
+      <div style={{ padding:"14px 14px 0", display:"flex", gap:8 }}>
+        <StatBox icon="✅" label="سارية" value={green} color={T.green}/>
+        <StatBox icon="⚠️" label="تحتاج انتباه" value={warn} color={T.yellow}/>
+        <StatBox icon="🔴" label="منتهية" value={expd} color={T.red}/>
+      </div>
+      <VehicleSelector vehicles={vehicles} selected={selVeh} onChange={setSelVeh}/>
+      <div style={{ padding:"10px 14px 0" }}>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 بحث برقم اللوحة أو النوع"
+          style={{ width:"100%", background:T.card, border:`1px solid ${T.border}`, borderRadius:10, padding:"10px 14px", color:T.text, fontSize:13, ...GF, boxSizing:"border-box", outline:"none" }}/>
+      </div>
+
+      <div style={{ padding:"12px 14px" }}>
+        {displayed.map(v => {
+          const ls = statusOf(v.license_exp), is_ = statusOf(v.insurance_exp), wc = worstColor(v);
+          return (
+            <div key={v.id} style={{ background:T.card, borderRadius:16, marginBottom:12, border:`1px solid ${wc}33`, borderRight:`4px solid ${wc}` }}>
+              <div style={{ padding:"14px 16px", cursor:"pointer" }} onClick={()=>setDetail(v)}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+                  <span style={{ color:T.text, ...GF, fontWeight:700, fontSize:16 }}>{v.plate}</span>
+                  <span style={{ color:T.sub, ...GF, fontSize:12 }}>{v.type}</span>
+                </div>
+                <div style={{ display:"flex", gap:8 }}>
+                  <div style={{ flex:1, background:T.card2, borderRadius:10, padding:"8px 10px" }}>
+                    <div style={{ color:T.sub, ...GF, fontSize:10, marginBottom:4 }}>الترخيص</div>
+                    <div style={{ color:T.text, ...GF, fontSize:12, marginBottom:6 }}>{v.license_exp?toDateStr(v.license_exp):"غير مدخل"}</div>
+                    <Badge label={ls.label} color={ls.color}/>
+                  </div>
+                  <div style={{ flex:1, background:T.card2, borderRadius:10, padding:"8px 10px" }}>
+                    <div style={{ color:T.sub, ...GF, fontSize:10, marginBottom:4 }}>التأمين</div>
+                    <div style={{ color:T.text, ...GF, fontSize:12, marginBottom:6 }}>{v.insurance_exp?toDateStr(v.insurance_exp):"غير مدخل"}</div>
+                    <Badge label={is_.label} color={is_.color}/>
+                  </div>
+                </div>
+              </div>
+              {/* Quick insurance input if missing */}
+              {!v.insurance_exp && (
+                <div style={{ padding:"0 14px 14px", borderTop:`1px solid ${T.border}`, paddingTop:12 }}>
+                  <div style={{ color:T.sub, ...GF, fontSize:11, marginBottom:6 }}>أدخل تاريخ انتهاء التأمين:</div>
+                  <div style={{ display:"flex", gap:8 }}>
+                    <input type="date" value={quickIns[v.id]||""}
+                      onChange={e=>setQuickIns(q=>({...q,[v.id]:e.target.value}))}
+                      style={{ flex:1, background:T.card2, border:`1px solid ${T.gold}44`, borderRadius:8, padding:"8px 12px", color:T.text, fontSize:12, ...GF, outline:"none" }}/>
+                    <button onClick={()=>{ const val=quickIns[v.id]; if(val){ updateField(v.id,"insurance_exp",val); setQuickIns(q=>({...q,[v.id]:""})); } }}
+                      style={{ background:T.gold, border:"none", color:"#000", borderRadius:8, padding:"8px 14px", cursor:"pointer", ...GF, fontWeight:700, fontSize:13 }}>حفظ</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ padding:"0 14px" }}>
+        <Btn label="+ إضافة مركبة" onClick={()=>setShowAdd(true)} full color={T.gold}/>
+      </div>
+
+      <Modal show={showAdd} onClose={()=>setShowAdd(false)} title="إضافة مركبة جديدة">
+        <Field label="رقم اللوحة" value={form.plate} onChange={v=>setForm({...form,plate:v})} req/>
+        <Field label="نوع المركبة (اختياري)" value={form.type} onChange={v=>setForm({...form,type:v})}/>
+        <div style={{marginBottom:14}}>
+          <label style={{color:T.sub,fontSize:12,...GF,display:"block",marginBottom:6}}>نوع الوقود</label>
+          <select value={form.fuelType||""} onChange={e=>setForm({...form,fuelType:e.target.value})}
+            style={{width:"100%",background:T.card2,border:`1px solid ${T.border}`,borderRadius:10,padding:"11px 14px",color:T.text,fontSize:14,...GF,boxSizing:"border-box",outline:"none"}}>
+            <option value="">بنزين / ديزل</option>
+            <option value="electric">⚡ كهربائية</option>
+            <option value="hybrid">🔋 هايبرد</option>
+          </select>
+        </div>
+        <Field label="تاريخ انتهاء الترخيص" value={form.license_exp} onChange={v=>setForm({...form,license_exp:v})} type="date"/>
+        <Field label="تاريخ انتهاء التأمين" value={form.insurance_exp} onChange={v=>setForm({...form,insurance_exp:v})} type="date"/>
+        <Btn label="✓ حفظ المركبة" onClick={addVehicle} full color={T.gold}/>
+      </Modal>
+
+      <Modal show={!!detail} onClose={()=>setDetail(null)} title={detail?.plate||""}>
+        {detail && (
+          <div>
+            <div style={{ background:T.card2, borderRadius:12, padding:16, marginBottom:16 }}>
+              {[["نوع المركبة",detail.type||"—"],["انتهاء الترخيص",detail.license_exp?toDateStr(detail.license_exp):"غير مدخل"],["انتهاء التأمين",detail.insurance_exp?toDateStr(detail.insurance_exp):"غير مدخل"]].map(([k,v]) => (
+                <div key={k} style={{ display:"flex", justifyContent:"space-between", padding:"8px 0", borderBottom:`1px solid ${T.border}` }}>
+                  <span style={{ color:T.sub, ...GF, fontSize:13 }}>{k}</span>
+                  <span style={{ color:T.text, ...GF, fontSize:13 }}>{v}</span>
+                </div>
+              ))}
+            </div>
+            <Field label="تحديث تاريخ انتهاء التأمين" value={detail.insurance_exp||""} onChange={v=>{ updateField(detail.id,"insurance_exp",v); setDetail({...detail,insurance_exp:v}); }} type="date"/>
+            <Field label="تحديث تاريخ انتهاء الترخيص" value={detail.license_exp||""} onChange={v=>{ updateField(detail.id,"license_exp",v); setDetail({...detail,license_exp:v}); }} type="date"/>
+            {(detail.renewHistory||[]).length>0 && (
+              <div style={{ marginBottom:16 }}>
+                <p style={{ color:T.sub, ...GF, fontSize:12, marginBottom:10 }}>سجل التجديدات</p>
+                {detail.renewHistory.map((r,i) => (
+                  <div key={i} style={{ background:T.card2, borderRadius:10, padding:"8px 12px", marginBottom:8, display:"flex", justifyContent:"space-between" }}>
+                    <span style={{ color:T.text, ...GF, fontSize:13 }}>{r.kind}</span>
+                    <span style={{ color:T.sub, ...GF, fontSize:12 }}>{toDateStr(r.date)}{r.amount?` | ${r.amount} د.أ`:""}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <Btn label="🔄 تجديد" onClick={()=>{ setRenewing(detail); setDetail(null); }} full color={T.blue}/>
+          </div>
+        )}
+      </Modal>
+
+      <Modal show={!!renewing} onClose={()=>setRenewing(null)} title={`تجديد — ${renewing?.plate}`}>
+        {renewing && (
+          <div>
+            <FieldSelect label="نوع التجديد" value={rForm.kind} onChange={v=>setRForm({...rForm,kind:v})} opts={["ترخيص","تأمين"]} req/>
+            <Field label="تاريخ الانتهاء الجديد" value={rForm.date} onChange={v=>setRForm({...rForm,date:v})} type="date" req/>
+            <Field label="المبلغ المدفوع (اختياري)" value={rForm.amount} onChange={v=>setRForm({...rForm,amount:v})} type="number"/>
+            <Btn label="✓ حفظ التجديد" onClick={doRenew} full color={T.gold}/>
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════
+// HANDOVER TAB
+// ══════════════════════════════════════════════════
+function HandoverTab({ handovers, saveHandovers, vehicles, equipmentList, myPhone, drivers, onBack }) {
+  const [selVeh, setSelVeh] = useState("");
+  const [formVeh, setFormVeh] = useState(null);
+  const [histVeh, setHistVeh] = useState(null);
+  const [search, setSearch] = useState("");
+  const [showSig, setShowSig] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [formTime, setFormTime] = useState(null);
+  const [form, setForm] = useState({ type:"استلام", driver:"", equip:{}, photos:{f:null,b:null,r:null,l:null}, signature:null });
+  const [blockMsg, setBlockMsg] = useState("");
+  const [photoFiles, setPhotoFiles] = useState({f:null,b:null,r:null,l:null});
+  const [photoPreviews, setPhotoPreviews] = useState({f:null,b:null,r:null,l:null});
+
+  // حالة أي سائق: هل عنده مركبة الآن؟
+  const getDriverStatus = (driverName) => {
+    const dh = handovers.filter(h=>h.driver===driverName).sort((a,b)=>new Date(a.date)-new Date(b.date));
+    if (!dh.length) return null;
+    const last = dh[dh.length-1];
+    if (last.type==="استلام") {
+      const veh = vehicles.find(v=>v.id===last.vehicleId);
+      return { plate:veh?.plate||"—", since:last.date, vehicleId:last.vehicleId };
+    }
+    return null;
+  };
+
+  // من يحمل هذه المركبة الآن؟
+  const getCurrentHolder = (vehicleId) => {
+    const vh = handovers.filter(h=>h.vehicleId===vehicleId).sort((a,b)=>new Date(a.date)-new Date(b.date));
+    if (!vh.length) return null;
+    const last = vh[vh.length-1];
+    return last.type==="استلام" ? last.driver : null;
+  };
+
+  // إعادة ضبط ذكي: تحديد النوع والسائق والعدة تلقائياً حسب حالة المركبة
+  useEffect(() => {
+    if (formVeh) {
+      const holder = getCurrentHolder(formVeh);
+      // جلب العدة من آخر سند استلام للمركبة
+      const vehH = handovers.filter(h=>h.vehicleId===formVeh).sort((a,b)=>new Date(a.date)-new Date(b.date));
+      const lastHandover = vehH.length ? vehH[vehH.length-1] : null;
+      const lastEquip = (lastHandover?.type==="استلام" && lastHandover?.equip) ? lastHandover.equip : {};
+      setForm({
+        type: holder ? "تسليم" : "استلام",
+        driver: holder || "",
+        equip: holder ? lastEquip : {},
+        photos:{f:null,b:null,r:null,l:null}, signature:null
+      });
+      setFormTime(new Date());
+      setBlockMsg("");
+      // تنظيف الصور المؤقتة
+      setPhotoFiles({f:null,b:null,r:null,l:null});
+      setPhotoPreviews(prev => { Object.values(prev).forEach(u=>u&&URL.revokeObjectURL(u)); return {f:null,b:null,r:null,l:null}; });
+    }
+  }, [formVeh]);
+
+  const closeFormVeh = () => {
+    Object.values(photoPreviews).forEach(u=>u&&URL.revokeObjectURL(u));
+    setPhotoFiles({f:null,b:null,r:null,l:null});
+    setPhotoPreviews({f:null,b:null,r:null,l:null});
+    setForm({ type:"استلام", driver:"", equip:{}, photos:{f:null,b:null,r:null,l:null}, signature:null });
+    setFormVeh(null);
+  };
+  const vehHandovers = id => handovers.filter(h=>h.vehicleId===id).sort((a,b)=>new Date(a.date)-new Date(b.date));
+  const lastH = id => { const a=vehHandovers(id); return a.length?a[a.length-1]:null; };
+
+  const handlePhotoSelect = (side, e) => {
+    const file = e.target.files[0]; if (!file) return;
+    setPhotoPreviews(prev => {
+      if (prev[side]) URL.revokeObjectURL(prev[side]);
+      return {...prev, [side]: URL.createObjectURL(file)};
+    });
+    setPhotoFiles(prev => ({...prev, [side]: file}));
+  };
+
+  const submit = async () => {
+    if (!form.driver||!form.type||saving) return;
+    // ── منع كلي: السائق مستلم مركبة أخرى ──
+    if (form.type==="استلام") {
+      const dStatus = getDriverStatus(form.driver);
+      if (dStatus) {
+        setBlockMsg(`⛔ ${form.driver} مستلم مركبة ${dStatus.plate} منذ ${toDateStr(dStatus.since)} — يجب تسجيل التسليم أولاً`);
+        return;
+      }
+    }
+    setBlockMsg("");
+    setSaving(true);
+    const hId = uid();
+    const submitTime = new Date();
+    // ── رفع الصور على Supabase Storage ──
+    const uploadedPhotos = {f:null,b:null,r:null,l:null};
+    for (const side of ["f","b","r","l"]) {
+      if (photoFiles[side]) {
+        try { uploadedPhotos[side] = await DB.uploadPhoto(photoFiles[side], hId, side); }
+        catch(e) { console.error(`Photo upload error [${side}]:`, e); }
+      }
+    }
+    const rec = { id:hId, vehicleId:formVeh, type:form.type, driver:form.driver, date:submitTime.toISOString(), equip:form.equip, photos:uploadedPhotos, signature:form.signature };
+    await saveHandovers(rec);
+    // إرسال سند واتساب
+    if (myPhone) {
+      const veh = vehicles.find(v=>v.id===formVeh);
+      const equippedItems = Object.entries(form.equip).filter(([,v])=>v).map(([k])=>k);
+      const photoCount = Object.values(uploadedPhotos).filter(Boolean).length;
+      let msg = `🔑 *سند ${form.type} — الأثر الذهبي*\n\n🚗 المركبة: ${veh?.plate}\n👤 السائق: ${form.driver}\n📅 ${submitTime.toLocaleDateString("ar-JO")} ${fmt12(submitTime)}\n`;
+      if (equippedItems.length) msg += `✓ العدة: ${equippedItems.join("، ")}\n`;
+      if (photoCount) msg += `📷 الصور: ${photoCount} صورة محفوظة\n`;
+      sendWA(myPhone, msg);
+    }
+    // تنظيف الصور المؤقتة من الذاكرة
+    Object.values(photoPreviews).forEach(u=>u&&URL.revokeObjectURL(u));
+    setPhotoFiles({f:null,b:null,r:null,l:null});
+    setPhotoPreviews({f:null,b:null,r:null,l:null});
+    setFormVeh(null);
+    setSaving(false);
+  };
+
+  const photoSides = [{k:"f",l:"أمامية"},{k:"b",l:"خلفية"},{k:"r",l:"يمين"},{k:"l",l:"يسار"}];
+  const displayed = vehicles.filter(v => {
+    if (selVeh && v.id!==selVeh) return false;
+    if (search && !v.plate.includes(search) && !v.type?.includes(search)) return false;
+    return true;
+  });
+
+  return (
+    <div style={{ minHeight:"100vh", background:T.bg, direction:"rtl", paddingBottom:40 }}>
+      <Header title="🔑 الاستلام والتسليم" onBack={onBack}/>
+      <VehicleSelector vehicles={vehicles} selected={selVeh} onChange={setSelVeh}/>
+      <div style={{ padding:"10px 14px 0" }}>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 بحث"
+          style={{ width:"100%", background:T.card, border:`1px solid ${T.border}`, borderRadius:10, padding:"10px 14px", color:T.text, fontSize:13, ...GF, boxSizing:"border-box", outline:"none" }}/>
+      </div>
+
+      <div style={{ padding:"12px 14px" }}>
+        {displayed.map(v => {
+          const last = lastH(v.id), lc = last?.type==="استلام" ? T.blue : T.green;
+          return (
+            <div key={v.id} style={{ background:T.card, borderRadius:16, marginBottom:12, border:`1px solid ${T.border}`, overflow:"hidden" }}>
+              <div style={{ padding:"14px 16px" }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                  <span style={{ color:T.text, ...GF, fontWeight:700, fontSize:16 }}>{v.plate}</span>
+                  {last && <Badge label={last.type} color={lc}/>}
+                </div>
+                {v.type && <div style={{ color:T.sub, ...GF, fontSize:12, marginTop:4 }}>{v.type}</div>}
+                {last && <div style={{ color:T.sub, ...GF, fontSize:12, marginTop:6 }}>👤 {last.driver} — {toDateStr(last.date)} {fmt12(last.date)}</div>}
+              </div>
+              <div style={{ display:"flex", borderTop:`1px solid ${T.border}` }}>
+                <button onClick={()=>setFormVeh(v.id)} style={{ flex:1, background:"none", border:"none", color:T.gold, ...GF, fontSize:13, fontWeight:600, padding:"11px", cursor:"pointer" }}>+ إجراء جديد</button>
+                <button onClick={()=>setHistVeh(v)} style={{ flex:1, background:"none", border:"none", borderRight:`1px solid ${T.border}`, color:T.sub, ...GF, fontSize:13, padding:"11px", cursor:"pointer" }}>📂 السجل</button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Form Modal */}
+      <Modal show={!!formVeh} onClose={closeFormVeh} title={`إجراء — ${vehicles.find(v=>v.id===formVeh)?.plate||""}`}>
+        <div style={{ background:T.card2, borderRadius:12, padding:"10px 14px", marginBottom:14, border:`1px solid ${T.gold}33` }}>
+          <div style={{ color:T.sub, ...GF, fontSize:11 }}>التاريخ والوقت (تلقائي)</div>
+          <div style={{ color:T.gold, ...GF, fontSize:15, fontWeight:700, marginTop:4 }}>{formTime ? `${formTime.toLocaleDateString("ar-JO")} — ${fmt12(formTime)}` : "—"}</div>
+        </div>
+        <FieldSelect label="الحالة" value={form.type} onChange={v=>{ setForm({...form,type:v,driver:""}); setBlockMsg(""); }} opts={["استلام","تسليم"]} req/>
+
+        {/* قائمة السائقين الذكية */}
+        <div style={{ marginBottom:14 }}>
+          <label style={{ color:T.sub, fontSize:12, ...GF, display:"block", marginBottom:6 }}>اسم السائق *</label>
+          <select value={form.driver} onChange={e=>{ setForm({...form,driver:e.target.value}); setBlockMsg(""); }}
+            style={{ width:"100%", background:T.card2, border:`1px solid ${form.driver?T.gold:T.border}`, borderRadius:10, padding:"11px 14px", color:form.driver?T.text:T.sub, fontSize:14, ...GF, boxSizing:"border-box", outline:"none" }}>
+            <option value="">— اختر السائق —</option>
+            {form.type==="استلام"
+              ? drivers.filter(d=>!getDriverStatus(d.name)).map(d=><option key={d.id} value={d.name}>{d.name}</option>)
+              : drivers.map(d=>{ const st=getDriverStatus(d.name); return <option key={d.id} value={d.name}>{d.name}{st?` 🔴 (${st.plate})`:""}</option>; })
+            }
+          </select>
+          {form.type==="استلام" && drivers.filter(d=>getDriverStatus(d.name)).length>0 && (
+            <div style={{ color:T.sub, ...GF, fontSize:11, marginTop:6 }}>
+              {drivers.filter(d=>getDriverStatus(d.name)).length} سائق مشغول غير معروض
+            </div>
+          )}
+        </div>
+        {blockMsg && <div style={{ background:T.red+"22", borderRadius:10, padding:"10px 14px", marginBottom:14, color:T.red, ...GF, fontSize:13 }}>{blockMsg}</div>}
+
+        {/* Equipment checklist */}
+        <div style={{ marginBottom:14 }}>
+          <label style={{ color:T.sub, fontSize:12, ...GF, display:"block", marginBottom:8 }}>عدة المركبة</label>
+          <div style={{ background:T.card2, borderRadius:12, padding:"12px 14px" }}>
+            {equipmentList.map(item => (
+              <label key={item} style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10, cursor:"pointer" }}>
+                <input type="checkbox" checked={!!form.equip[item]} onChange={e=>setForm(f=>({...f,equip:{...f.equip,[item]:e.target.checked}}))}
+                  style={{ width:18, height:18, accentColor:T.gold, flexShrink:0 }}/>
+                <span style={{ color:T.text, ...GF, fontSize:14 }}>{item}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        {/* مقارنة الصور عند التسليم */}
+        {form.type==="تسليم" && (() => {
+          const prevH = [...handovers].filter(h=>h.vehicleId===formVeh).sort((a,b)=>new Date(a.date)-new Date(b.date));
+          const lastReceive = [...prevH].reverse().find(h=>h.type==="استلام");
+          if (!lastReceive) return null;
+          const prevPhotos = Object.entries(lastReceive.photos||{}).filter(([,v])=>v);
+          if (!prevPhotos.length) return null;
+          const sideLabel = {f:"أمامية",b:"خلفية",r:"يمين",l:"يسار"};
+          return (
+            <div style={{ marginBottom:14 }}>
+              <div style={{ background:T.blue+"11", border:`1px solid ${T.blue}33`, borderRadius:14, padding:"12px 14px" }}>
+                <div style={{ color:T.blue, ...GF, fontSize:12, fontWeight:700, marginBottom:10 }}>
+                  🔍 صور الاستلام السابق للمقارنة
+                  <span style={{ color:T.sub, fontWeight:400, marginRight:6 }}>{toDateStr(lastReceive.date)} — {lastReceive.driver}</span>
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                  {prevPhotos.map(([s,src]) => (
+                    <div key={s} style={{ background:T.card3, borderRadius:10, overflow:"hidden" }}>
+                      <img src={src} style={{ width:"100%", height:72, objectFit:"cover", display:"block" }} alt={sideLabel[s]||s}
+                        onError={e=>{e.target.style.display="none";e.target.nextSibling.style.display="flex";}}/>
+                      <div style={{ display:"none", height:72, alignItems:"center", justifyContent:"center", color:T.sub, fontSize:12, ...GF }}>لا توجد صورة</div>
+                      <div style={{ padding:"4px 8px", color:T.blue, ...GF, fontSize:10, textAlign:"center" }}>{sideLabel[s]||s}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Photos */}
+        <div style={{ marginBottom:14 }}>
+          <label style={{ color:T.sub, fontSize:12, ...GF, display:"block", marginBottom:8 }}>
+            📷 صور المركبة الحالية (اختياري)
+            {Object.values(photoFiles).filter(Boolean).length > 0 &&
+              <span style={{ color:T.gold, marginRight:8 }}>{Object.values(photoFiles).filter(Boolean).length} صورة ✓</span>}
+          </label>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+            {photoSides.map(({k,l}) => (
+              <div key={k}>
+                <input type="file" accept="image/*" capture="environment" onChange={e=>handlePhotoSelect(k,e)} style={{ display:"none" }} id={`ph-${k}`}/>
+                <label htmlFor={`ph-${k}`} style={{ display:"block", background:T.card2, borderRadius:10, border:`2px dashed ${photoPreviews[k]?T.gold:T.border}`, padding:"14px 8px", textAlign:"center", cursor:"pointer" }}>
+                  {photoPreviews[k]
+                    ? <img src={photoPreviews[k]} style={{ width:"100%", height:55, objectFit:"cover", borderRadius:8 }} alt=""/>
+                    : <><div style={{ fontSize:22 }}>📷</div><div style={{ color:T.sub, ...GF, fontSize:11, marginTop:4 }}>{l}</div></>}
+                </label>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Signature */}
+        <div style={{ marginBottom:14 }}>
+          <label style={{ color:T.sub, fontSize:12, ...GF, display:"block", marginBottom:8 }}>توقيع السائق</label>
+          {form.signature
+            ? <div style={{ background:T.card2, borderRadius:12, padding:8, position:"relative" }}>
+                <img src={form.signature} style={{ width:"100%", borderRadius:8, maxHeight:120, objectFit:"contain" }} alt="توقيع"/>
+                <button onClick={()=>setForm(f=>({...f,signature:null}))} style={{ position:"absolute", top:8, left:8, background:T.red, border:"none", color:"#fff", borderRadius:6, padding:"4px 8px", cursor:"pointer", ...GF, fontSize:11 }}>إعادة</button>
+              </div>
+            : <button onClick={()=>setShowSig(true)} style={{ width:"100%", background:T.card2, border:`2px dashed ${T.gold}44`, borderRadius:12, padding:"16px", color:T.sub, cursor:"pointer", ...GF, fontSize:13 }}>✍️ اضغط للتوقيع</button>
+          }
+        </div>
+
+        <Btn label={saving?"جارٍ الحفظ...":"✓ حفظ الإجراء وإرسال السند"} onClick={submit} full color={T.gold} disabled={saving}/>
+      </Modal>
+
+      {/* Signature Modal */}
+      <Modal show={showSig} onClose={()=>setShowSig(false)} title="توقيع السائق">
+        <SignaturePad onSave={sig=>{ setForm(f=>({...f,signature:sig})); setShowSig(false); }} onCancel={()=>setShowSig(false)}/>
+      </Modal>
+
+      {/* History Modal */}
+      <Modal show={!!histVeh} onClose={()=>setHistVeh(null)} title={`سجل — ${histVeh?.plate}`}>
+        {histVeh && (() => {
+          const records = vehHandovers(histVeh.id).reverse();
+          if (!records.length) return <div style={{ textAlign:"center", color:T.sub, ...GF, padding:24 }}>لا يوجد سجل بعد</div>;
+          return records.map(h => {
+            const hc = h.type==="استلام" ? T.blue : T.green;
+            const equippedItems = Object.entries(h.equip||{}).filter(([,v])=>v).map(([k])=>k);
+            const photos = Object.entries(h.photos||{}).filter(([,v])=>v);
+            return (
+              <div key={h.id} style={{ background:T.card2, borderRadius:14, padding:"12px 14px", marginBottom:12, borderRight:`3px solid ${hc}` }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                  <Badge label={h.type} color={hc}/>
+                  <span style={{ color:T.sub, ...GF, fontSize:12 }}>{toDateStr(h.date)} {fmt12(h.date)}</span>
+                </div>
+                <div style={{ color:T.text, ...GF, marginTop:8, fontWeight:600 }}>👤 {h.driver}</div>
+                {equippedItems.length>0 && <div style={{ color:T.sub, ...GF, fontSize:12, marginTop:6 }}>✓ {equippedItems.join("، ")}</div>}
+                {h.signature && <img src={h.signature} style={{ width:"100%", maxHeight:80, objectFit:"contain", borderRadius:8, marginTop:8 }} alt="توقيع"/>}
+                {photos.length>0 && (
+                  <div style={{ display:"flex", gap:6, marginTop:8, flexWrap:"wrap" }}>
+                    {photos.map(([s,src]) => <img key={s} src={src} style={{ width:52, height:52, objectFit:"cover", borderRadius:8 }} alt=""/>)}
+                  </div>
+                )}
+              </div>
+            );
+          });
+        })()}
+      </Modal>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════
+// MAINTENANCE TAB
+// ══════════════════════════════════════════════════
+function MaintenanceTab({ records, saveRecords, vehicles, fuelRecords, onBack }) {
+  const [selVeh, setSelVeh] = useState("");
+  const [addVeh, setAddVeh] = useState(null);
+  const [histVeh, setHistVeh] = useState(null);
+  const [confirmVeh, setConfirmVeh] = useState(null);
+  const [search, setSearch] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ oilKm:"", date:todayISO(), filterOil:1, filterDiesel:1, filterAir:1, brakes:1 });
+
+  const vehRecs = id => records.filter(r=>r.vehicleId===id).sort((a,b)=>a.oilKm-b.oilKm);
+
+  const calcStatus = id => {
+    const vr = vehRecs(id);
+    const fRecs = fuelRecords.filter(r=>r.vehicleId===id).sort((a,b)=>b.currKm-a.currKm);
+    const latestFuelKm = fRecs.length ? fRecs[0].currKm : null;
+    if (!vr.length) return { noData:true, latestFuelKm };
+    const last = vr[vr.length-1];
+    const nextOil = last.nextOilKm || (last.oilKm+5000);
+    const alerts = [];
+    if ((last.filterOil||0) >= 2) alerts.push({ label:"فلتر الزيت" });
+    if ((last.filterDiesel||0) >= 3) alerts.push({ label:"فلتر الديزل" });
+    if ((last.filterAir||0) >= 3) alerts.push({ label:"فلتر الهواء" });
+    if ((last.brakes||0) >= 3) alerts.push({ label:"البريكات" });
+    const twoMo = new Date(); twoMo.setMonth(twoMo.getMonth()-2);
+    const noService = new Date(last.date) < twoMo;
+    let oilFromFuel = null;
+    if (latestFuelKm) {
+      const diff = nextOil - latestFuelKm;
+      if (diff<=0) oilFromFuel = { msg:`عداد المحروقات تجاوز موعد الغيار بـ ${Math.abs(diff).toLocaleString()} كلم`, color:T.red };
+      else if (diff<=500) oilFromFuel = { msg:`موعد غيار الزيت خلال ${diff.toLocaleString()} كلم`, color:T.orange };
+    }
+    return { nextOil, lastKm:last.oilKm, lastDate:last.date, filterOil:last.filterOil||1, filterDiesel:last.filterDiesel||1, filterAir:last.filterAir||1, brakes:last.brakes||1, alerts, noService, latestFuelKm, oilFromFuel };
+  };
+
+  const thisMonth = records.filter(r => {
+    const d = new Date(r.date||r.addedAt), n = new Date();
+    return d.getMonth()===n.getMonth() && d.getFullYear()===n.getFullYear();
+  }).length;
+
+  const sorted = [...vehicles].sort((a,b) => {
+    const sa = calcStatus(a.id), sb = calcStatus(b.id);
+    if (sa.noData && !sb.noData) return 1;
+    if (!sa.noData && sb.noData) return -1;
+    return (sa.nextOil||9999999) - (sb.nextOil||9999999);
+  });
+
+  const displayed = sorted.filter(v => {
+    if (selVeh && v.id!==selVeh) return false;
+    if (search && !v.plate.includes(search) && !v.type?.includes(search)) return false;
+    return true;
+  });
+
+  const doAdd = async () => {
+    if (!form.oilKm||!form.date||saving) return;
+    setSaving(true);
+    const nextOilKm = (+form.oilKm) + 5000;
+    const rec = { id:uid(), vehicleId:addVeh, oilKm:+form.oilKm, nextOilKm, date:form.date,
+      filterOil:+form.filterOil, filterDiesel:+form.filterDiesel, filterAir:+form.filterAir, brakes:+form.brakes };
+    await saveRecords(rec);
+    setForm({ oilKm:"", date:todayISO(), filterOil:1, filterDiesel:1, filterAir:1, brakes:1 });
+    setAddVeh(null);
+    setSaving(false);
+  };
+
+  const confirmOilChange = veh => {
+    const vr = vehRecs(veh.id);
+    if (!vr.length) return;
+    const last = vr[vr.length-1];
+    const fRecs = fuelRecords.filter(r=>r.vehicleId===veh.id).sort((a,b)=>b.currKm-a.currKm);
+    const currKm = fRecs.length ? fRecs[0].currKm : last.oilKm+5000;
+    const newFilterOil = (last.filterOil||0)>=2 ? 1 : (last.filterOil||0)+1;
+    const newFilterDiesel = (last.filterDiesel||0)>=3 ? 1 : (last.filterDiesel||0)+1;
+    const newFilterAir = (last.filterAir||0)>=3 ? 1 : (last.filterAir||0)+1;
+    const newBrakes = (last.brakes||0)>=3 ? 1 : (last.brakes||0)+1;
+    setConfirmVeh({ veh, currKm, last, newFilterOil, newFilterDiesel, newFilterAir, newBrakes });
+  };
+
+  const applyOilChange = async data => {
+    if (saving) return;
+    setSaving(true);
+    const nextOilKm = data.currKm + 5000;
+    const rec = { id:uid(), vehicleId:data.veh.id, oilKm:data.currKm, nextOilKm, date:todayISO(),
+      filterOil:data.newFilterOil, filterDiesel:data.newFilterDiesel, filterAir:data.newFilterAir, brakes:data.newBrakes };
+    await saveRecords(rec);
+    setConfirmVeh(null);
+    setSaving(false);
+  };
+
+  const Counter = ({ label, value, onChange, limit }) => (
+    <div style={{ marginBottom:12 }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", background:T.card2, borderRadius:10, padding:"10px 14px" }}>
+        <span style={{ color:T.text, ...GF, fontSize:13 }}>{label}</span>
+        <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+          <span style={{ color:value>=limit?T.red:T.gold, ...GF, fontSize:13, fontWeight:700 }}>{value}/{limit}</span>
+          <div style={{ display:"flex", gap:6 }}>
+            <button onClick={()=>onChange(Math.max(1,value-1))} style={{ background:T.card3, border:"none", color:T.text, borderRadius:6, width:28, height:28, cursor:"pointer", fontSize:16 }}>-</button>
+            <button onClick={()=>onChange(Math.min(limit,value+1))} style={{ background:T.card3, border:"none", color:T.text, borderRadius:6, width:28, height:28, cursor:"pointer", fontSize:16 }}>+</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ minHeight:"100vh", background:T.bg, direction:"rtl", paddingBottom:40 }}>
+      <Header title="🔧 الصيانة" onBack={onBack}/>
+      <div style={{ padding:"14px 14px 0" }}>
+        <div style={{ background:T.card2, borderRadius:14, padding:"14px 16px", borderTop:`3px solid ${T.orange}`, display:"flex", alignItems:"center", gap:14 }}>
+          <span style={{ fontSize:28 }}>🔧</span>
+          <div><div style={{ color:T.sub, ...GF, fontSize:11 }}>إجراءات هذا الشهر</div><div style={{ color:T.orange, ...GF, fontSize:22, fontWeight:700 }}>{thisMonth}</div></div>
+        </div>
+      </div>
+
+      <VehicleSelector vehicles={vehicles} selected={selVeh} onChange={setSelVeh}/>
+
+      <div style={{ padding:"10px 14px 0" }}>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 بحث"
+          style={{ width:"100%", background:T.card, border:`1px solid ${T.border}`, borderRadius:10, padding:"10px 14px", color:T.text, fontSize:13, ...GF, boxSizing:"border-box", outline:"none" }}/>
+      </div>
+
+      <div style={{ padding:"12px 14px" }}>
+        {displayed.map(v => {
+          const s = calcStatus(v.id);
+          const borderC = s.noData ? T.border : (s.alerts.length||s.noService) ? T.red : s.oilFromFuel?.color || T.green;
+          return (
+            <div key={v.id} style={{ background:T.card, borderRadius:16, marginBottom:12, border:`1px solid ${borderC}33`, borderRight:`4px solid ${borderC}` }}>
+              <div style={{ padding:"14px 16px" }} onClick={()=>setHistVeh(v)}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+                  <span style={{ color:T.text, ...GF, fontWeight:700, fontSize:16 }}>{v.plate}</span>
+                  <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+                    {s.noService && <Badge label="⚠️ راجع البيانات" color={T.red}/>}
+                    {v.type && <span style={{ color:T.sub, ...GF, fontSize:11 }}>{v.type}</span>}
+                  </div>
+                </div>
+                {s.noData
+                  ? <div style={{ color:T.sub, ...GF, fontSize:12 }}>لا يوجد سجل صيانة — أضف أول غيار</div>
+                  : <>
+                    <div style={{ display:"flex", gap:8, marginBottom:8 }}>
+                      <div style={{ flex:1, background:T.card2, borderRadius:10, padding:"8px 10px" }}>
+                        <div style={{ color:T.sub, ...GF, fontSize:10 }}>الغيار القادم</div>
+                        <div style={{ color:T.orange, ...GF, fontWeight:700, fontSize:14 }}>{s.nextOil?.toLocaleString()} كلم</div>
+                      </div>
+                      {s.latestFuelKm && (
+                        <div style={{ flex:1, background:T.card2, borderRadius:10, padding:"8px 10px" }}>
+                          <div style={{ color:T.sub, ...GF, fontSize:10 }}>⛽ عداد المحروقات</div>
+                          <div style={{ color:T.blue, ...GF, fontWeight:700, fontSize:14 }}>{s.latestFuelKm?.toLocaleString()} كلم</div>
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                      {[{l:"فلتر الزيت",v:s.filterOil,m:2},{l:"فلتر الديزل",v:s.filterDiesel,m:3},{l:"فلتر الهواء",v:s.filterAir,m:3},{l:"البريكات",v:s.brakes,m:3}].map(f => (
+                        <div key={f.l} style={{ background:f.v>=f.m?T.red+"22":T.card2, border:`1px solid ${f.v>=f.m?T.red:T.border}`, borderRadius:8, padding:"4px 10px", display:"flex", gap:6, alignItems:"center" }}>
+                          <span style={{ color:f.v>=f.m?T.red:T.sub, ...GF, fontSize:11 }}>{f.l}</span>
+                          <span style={{ color:f.v>=f.m?T.red:T.gold, ...GF, fontSize:11, fontWeight:700 }}>{f.v}/{f.m}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {s.oilFromFuel && <div style={{ marginTop:8, background:s.oilFromFuel.color+"22", borderRadius:8, padding:"5px 10px" }}><span style={{ color:s.oilFromFuel.color, ...GF, fontSize:12 }}>⛽ {s.oilFromFuel.msg}</span></div>}
+                    {s.alerts.length>0 && <div style={{ marginTop:8 }}>{s.alerts.map((a,i) => <div key={i} style={{ background:T.red+"22", borderRadius:8, padding:"5px 10px", marginBottom:4 }}><span style={{ color:T.red, ...GF, fontSize:12 }}>⚠️ مستحق — {a.label}</span></div>)}</div>}
+                  </>
+                }
+              </div>
+              <div style={{ display:"flex", borderTop:`1px solid ${T.border}` }}>
+                <button onClick={()=>{ setAddVeh(v.id); }} style={{ flex:1, background:"none", border:"none", color:T.gold, ...GF, fontSize:13, fontWeight:600, padding:"11px", cursor:"pointer" }}>+ تسجيل غيار</button>
+                {!s.noData && <button onClick={()=>confirmOilChange(v)} style={{ flex:1, background:"none", border:"none", borderRight:`1px solid ${T.border}`, color:T.orange, ...GF, fontSize:13, padding:"11px", cursor:"pointer" }}>✓ تأكيد الغيار</button>}
+                <button onClick={()=>setHistVeh(v)} style={{ flex:1, background:"none", border:"none", borderRight:`1px solid ${T.border}`, color:T.sub, ...GF, fontSize:13, padding:"11px", cursor:"pointer" }}>📂 السجل</button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Add Modal */}
+      <Modal show={!!addVeh} onClose={()=>setAddVeh(null)} title={`تسجيل غيار — ${vehicles.find(v=>v.id===addVeh)?.plate||""}`}>
+        <Field label="قراءة عداد غيار الزيت (كلم)" value={form.oilKm} onChange={v=>setForm({...form,oilKm:v})} type="number" req/>
+        <Field label="تاريخ الإجراء" value={form.date} onChange={v=>setForm({...form,date:v})} type="date" req/>
+        {form.oilKm && (
+          <div style={{ background:T.card2, borderRadius:10, padding:"10px 14px", marginBottom:14, display:"flex", justifyContent:"space-between" }}>
+            <span style={{ color:T.sub, ...GF, fontSize:13 }}>الغيار القادم تلقائياً</span>
+            <span style={{ color:T.orange, ...GF, fontWeight:700 }}>{(+form.oilKm+5000).toLocaleString()} كلم</span>
+          </div>
+        )}
+        <p style={{ color:T.sub, ...GF, fontSize:12, marginBottom:12 }}>حالة الفلاتر والبريكات الحالية:</p>
+        <Counter label="فلتر الزيت (يستحق عند 2)" value={form.filterOil} onChange={v=>setForm({...form,filterOil:v})} limit={2}/>
+        <Counter label="فلتر الديزل (يستحق عند 3)" value={form.filterDiesel} onChange={v=>setForm({...form,filterDiesel:v})} limit={3}/>
+        <Counter label="فلتر الهواء (يستحق عند 3)" value={form.filterAir} onChange={v=>setForm({...form,filterAir:v})} limit={3}/>
+        <Counter label="البريكات (تستحق عند 3)" value={form.brakes} onChange={v=>setForm({...form,brakes:v})} limit={3}/>
+        <Btn label={saving?"جارٍ الحفظ...":"✓ حفظ غيار الزيت"} onClick={doAdd} full color={T.gold} disabled={saving}/>
+      </Modal>
+
+      {/* Confirm Modal */}
+      <Modal show={!!confirmVeh} onClose={()=>setConfirmVeh(null)} title="تأكيد غيار الزيت">
+        {confirmVeh && (
+          <div>
+            <div style={{ background:T.card2, borderRadius:12, padding:16, marginBottom:16 }}>
+              <p style={{ color:T.sub, ...GF, fontSize:12, marginBottom:12 }}>إعادة ضبط العدادات تلقائياً:</p>
+              {[{l:"فلتر الزيت",old:confirmVeh.last.filterOil||0,newV:confirmVeh.newFilterOil,max:2},
+                {l:"فلتر الديزل",old:confirmVeh.last.filterDiesel||0,newV:confirmVeh.newFilterDiesel,max:3},
+                {l:"فلتر الهواء",old:confirmVeh.last.filterAir||0,newV:confirmVeh.newFilterAir,max:3},
+                {l:"البريكات",old:confirmVeh.last.brakes||0,newV:confirmVeh.newBrakes,max:3},
+              ].map(f => (
+                <div key={f.l} style={{ display:"flex", justifyContent:"space-between", padding:"8px 0", borderBottom:`1px solid ${T.border}` }}>
+                  <span style={{ color:T.text, ...GF, fontSize:13 }}>{f.l}</span>
+                  <span style={{ color:T.sub, ...GF, fontSize:13 }}>{f.old}/{f.max} → <span style={{ color:T.green }}>{f.newV}/{f.max}</span></span>
+                </div>
+              ))}
+            </div>
+            <p style={{ color:T.sub, ...GF, fontSize:12, marginBottom:14 }}>يمكنك التعديل اليدوي بعد التأكيد</p>
+            <Btn label={saving?"جارٍ الحفظ...":"✓ تأكيد الغيار"} onClick={()=>applyOilChange(confirmVeh)} full color={T.gold} disabled={saving}/>
+          </div>
+        )}
+      </Modal>
+
+      {/* History Modal */}
+      <Modal show={!!histVeh} onClose={()=>setHistVeh(null)} title={`سجل صيانة — ${histVeh?.plate}`}>
+        {histVeh && (() => {
+          const rr = vehRecs(histVeh.id).reverse(), total = rr.length;
+          if (!total) return <div style={{ textAlign:"center", color:T.sub, ...GF, padding:24 }}>لا يوجد سجل بعد</div>;
+          return rr.map((r,i) => (
+            <div key={r.id} style={{ background:T.card2, borderRadius:12, padding:"12px 14px", marginBottom:10 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+                <span style={{ color:T.orange, ...GF, fontWeight:700 }}>غيار زيت #{total-i}</span>
+                <span style={{ color:T.sub, ...GF, fontSize:12 }}>{toDateStr(r.date)}</span>
+              </div>
+              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:8 }}>
+                <span style={{ color:T.sub, ...GF, fontSize:12 }}>العداد</span>
+                <span style={{ color:T.gold, ...GF, fontWeight:700 }}>{r.oilKm.toLocaleString()} كلم</span>
+              </div>
+              <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                {[{l:"فلتر زيت",v:r.filterOil||0,m:2},{l:"فلتر ديزل",v:r.filterDiesel||0,m:3},{l:"فلتر هواء",v:r.filterAir||0,m:3},{l:"بريكات",v:r.brakes||0,m:3}].map(f => (
+                  <span key={f.l} style={{ background:f.v>=f.m?T.red+"22":T.card3, color:f.v>=f.m?T.red:T.sub, borderRadius:6, padding:"2px 8px", ...GF, fontSize:11 }}>{f.l}: {f.v}/{f.m}</span>
+                ))}
+              </div>
+            </div>
+          ));
+        })()}
+      </Modal>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════
+// FUEL TAB
+// ══════════════════════════════════════════════════
+function FuelTab({ fuelRecords, saveFuelRecords, vehicles, maintenanceRecs, onBack }) {
+  const [selVeh, setSelVeh] = useState("");
+  const [showAdd, setShowAdd] = useState(false);
+  const [search, setSearch] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ vehicleId:"", prevKm:"", currKm:"", amount:"" });
+  const [oilAlert, setOilAlert] = useState(null);
+  const [costAlert, setCostAlert] = useState(null);
+  const [filter, setFilter] = useState("الكل");
+  const [histVeh, setHistVeh] = useState(null);
+
+  const lastFuelKm = id => {
+    const recs = fuelRecords.filter(r=>r.vehicleId===id).sort((a,b)=>b.currKm-a.currKm);
+    return recs.length ? recs[0].currKm : null;
+  };
+
+  const checkOil = (vehicleId, currKm) => {
+    const mRecs = maintenanceRecs.filter(r=>r.vehicleId===vehicleId).sort((a,b)=>a.oilKm-b.oilKm);
+    if (!mRecs.length) return null;
+    const last = mRecs[mRecs.length-1];
+    const nextOil = last.nextOilKm || (last.oilKm+5000);
+    const diff = nextOil - currKm;
+    if (diff<=0) return { msg:`⚠️ موعد غيار الزيت تجاوز ${Math.abs(diff).toLocaleString()} كلم`, color:T.red, urgent:true };
+    if (diff<=500) return { msg:`🔔 موعد غيار الزيت خلال ${diff.toLocaleString()} كلم`, color:T.orange, urgent:false };
+    return null;
+  };
+
+  const checkCostAnomaly = (vehicleId, newCost) => {
+    const prevRecs = fuelRecords.filter(r=>r.vehicleId===vehicleId && r.costPerKm);
+    if (prevRecs.length < 3) return null;
+    const avg = prevRecs.reduce((s,r)=>s+(r.costPerKm||0),0) / prevRecs.length;
+    const diff = ((newCost-avg)/avg) * 100;
+    if (diff>=50) return { msg:`🔴 تكلفة مشبوهة — أعلى بـ ${diff.toFixed(0)}% من المعدل`, color:T.red, avg:avg.toFixed(3) };
+    if (diff>=30) return { msg:`🟠 تكلفة مرتفعة — أعلى بـ ${diff.toFixed(0)}% من المعدل`, color:T.orange, avg:avg.toFixed(3) };
+    return null;
+  };
+
+  const addRecord = async () => {
+    if (!form.vehicleId||!form.prevKm||!form.currKm||!form.amount) return;
+    if (saving) return;
+    const prev = +form.prevKm, curr = +form.currKm;
+    if (curr<=prev) { showToast("❌ العداد الحالي يجب أن يكون أكبر من السابق", T.red); return; }
+    setSaving(true);
+    const dist = curr - prev;
+    const cost = +form.amount / dist;
+    const rec = { id:uid(), vehicleId:form.vehicleId, date:new Date().toISOString(), prevKm:prev, currKm:curr, dist, amount:+form.amount, costPerKm:+cost.toFixed(3) };
+    await saveFuelRecords(rec);
+    const oilChk = checkOil(form.vehicleId, curr);
+    if (oilChk) { const plate=vehicles.find(v=>v.id===form.vehicleId)?.plate; setOilAlert({...oilChk,plate}); }
+    const costChk = checkCostAnomaly(form.vehicleId, cost);
+    if (costChk) { const plate=vehicles.find(v=>v.id===form.vehicleId)?.plate; setCostAlert({...costChk,plate,cost:cost.toFixed(3)}); }
+    setForm({ vehicleId:"", prevKm:"", currKm:"", amount:"" });
+    setShowAdd(false);
+    setSaving(false);
+  };
+
+  const vehRecords = id => {
+    let recs = fuelRecords.filter(r=>r.vehicleId===id);
+    if (filter==="هذا الشهر") {
+      const n=new Date(); recs=recs.filter(r=>{const d=new Date(r.date);return d.getMonth()===n.getMonth()&&d.getFullYear()===n.getFullYear();});
+    } else if (filter==="الشهر الماضي") {
+      const n=new Date(); const lm=new Date(n.getFullYear(),n.getMonth()-1,1);
+      recs=recs.filter(r=>{const d=new Date(r.date);return d.getMonth()===lm.getMonth()&&d.getFullYear()===lm.getFullYear();});
+    }
+    return recs.sort((a,b)=>new Date(b.date)-new Date(a.date));
+  };
+  const displayed = vehicles.filter(v => {
+    if (v.fuelType === "electric") return false;
+    if (selVeh && v.id!==selVeh) return false;
+    if (search && !v.plate.includes(search) && !v.type?.includes(search)) return false;
+    if (filter!=="الكل" && vehRecords(v.id).length===0) return false;
+    return true;
+  });
+
+  const totalSpent = fuelRecords.reduce((s,r) => s+(r.amount||0), 0);
+  const thisMonth = fuelRecords.filter(r => { const d=new Date(r.date),n=new Date(); return d.getMonth()===n.getMonth()&&d.getFullYear()===n.getFullYear(); }).reduce((s,r) => s+(r.amount||0), 0);
+  const allCosts = fuelRecords.filter(r => r.costPerKm);
+  const avgCost = allCosts.length ? (allCosts.reduce((s,r)=>s+(r.costPerKm||0),0)/allCosts.length).toFixed(3) : 0;
+
+  return (
+    <div style={{ minHeight:"100vh", background:T.bg, direction:"rtl", paddingBottom:40 }}>
+      <Header title="⛽ المحروقات" onBack={onBack}
+        right={<button onClick={()=>setShowAdd(true)} style={{ background:T.gold, color:"#000", border:"none", borderRadius:8, padding:"7px 14px", ...GF, fontSize:13, fontWeight:700, cursor:"pointer" }}>+ تعبئة</button>}
+      />
+
+      {/* ── Summary Row ── */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, padding:"14px 14px 0" }}>
+        {[
+          { label:"هذا الشهر", value:`${thisMonth.toFixed(0)} د.أ`, color:T.gold },
+          { label:"إجمالي الإنفاق", value:`${totalSpent.toFixed(0)} د.أ`, color:T.blue },
+          { label:"متوسط/كلم", value:`${avgCost}`, color:T.green },
+        ].map((s,i) => (
+          <div key={i} style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:12, padding:"10px 12px", textAlign:"center", boxShadow:T.shadow }}>
+            <div style={{ color:s.color, ...GF, fontSize:15, fontWeight:900 }}>{s.value}</div>
+            <div style={{ color:T.sub, ...GF, fontSize:10, marginTop:3, fontWeight:600 }}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Filter chips ── */}
+      <div style={{ padding:"12px 14px 0", display:"flex", gap:7, overflowX:"auto" }}>
+        {["الكل","هذا الشهر","الشهر الماضي"].map((l,i) => (
+          <button key={i} onClick={()=>setFilter(l)} style={{ background:filter===l?T.blueSoft:T.card2, color:filter===l?T.blue:T.sub2, border:`1px solid ${filter===l?"rgba(96,165,250,0.3)":T.border}`, borderRadius:20, padding:"7px 16px", ...GF, fontSize:12, fontWeight:700, cursor:"pointer", whiteSpace:"nowrap" }}>{l}</button>
+        ))}
+        <select value={selVeh} onChange={e=>setSelVeh(e.target.value)}
+          style={{ background:selVeh?T.goldGlow:T.card2, border:`1px solid ${selVeh?"rgba(245,197,66,0.3)":T.border}`, borderRadius:20, padding:"7px 14px", color:selVeh?T.gold:T.sub2, fontSize:12, ...GF, outline:"none", cursor:"pointer" }}>
+          <option value="">كل المركبات</option>
+          {vehicles.filter(v=>v.fuelType!=="electric").map(v=><option key={v.id} value={v.id}>{v.plate}{v.type?` — ${v.type}`:""}</option>)}
+        </select>
+      </div>
+
+      <div style={{ padding:"10px 14px 0" }}>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 بحث"
+          style={{ width:"100%", background:T.card2, border:`1px solid ${T.border}`, borderRadius:10, padding:"10px 14px", color:T.text, fontSize:13, ...GF, boxSizing:"border-box", outline:"none" }}/>
+      </div>
+
+      <div style={{ padding:"12px 14px" }}>
+        {displayed.length===0 && (
+          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", padding:"50px 30px", textAlign:"center" }}>
+            <div style={{ width:80, height:80, background:T.card2, border:`2px dashed ${T.border2}`, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:34, marginBottom:20 }}>⛽</div>
+            <div style={{ color:T.text, ...GF, fontSize:16, fontWeight:800, marginBottom:8 }}>لا توجد سجلات وقود</div>
+            <div style={{ color:T.sub, ...GF, fontSize:13, marginBottom:24 }}>ابدأ بتسجيل أول تعبئة لمتابعة الإنفاق وحساب تكلفة الكيلومتر</div>
+            <button onClick={()=>setShowAdd(true)} style={{ background:T.gold, color:"#000", border:"none", borderRadius:12, padding:"12px 24px", ...GF, fontSize:14, fontWeight:800, cursor:"pointer" }}>+ تسجيل تعبئة</button>
+          </div>
+        )}
+        {displayed.map(v => {
+          const recs = vehRecords(v.id);
+          const last = recs[0];
+          const oilChk = last ? checkOil(v.id, last.currKm) : null;
+          const validCostRecs = recs.filter(r=>r.costPerKm);
+          const vAvg = validCostRecs.length>=3 ? (validCostRecs.reduce((s,r)=>s+(r.costPerKm||0),0)/validCostRecs.length).toFixed(3) : null;
+          return (
+            <div key={v.id} style={{ background:T.card, borderRadius:16, marginBottom:10, border:`1px solid ${T.border}`, boxShadow:T.shadow, overflow:"hidden" }}>
+              {/* Card Header */}
+              <div style={{ background:T.blueSoft, borderBottom:`1px solid rgba(96,165,250,0.1)`, padding:"12px 14px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                <div>
+                  <div style={{ color:T.gold, ...GF, fontWeight:900, fontSize:15 }}>{v.plate}</div>
+                  {v.type && <div style={{ color:T.sub, ...GF, fontSize:11, marginTop:2 }}>{v.type}</div>}
+                </div>
+                {last && <div style={{ background:T.blueSoft, border:`1px solid rgba(96,165,250,0.2)`, borderRadius:8, padding:"6px 12px", color:T.blue, ...GF, fontWeight:900, fontSize:14 }}>{last.amount.toFixed(3)} د.أ</div>}
+              </div>
+              {/* Stats row */}
+              {last ? (
+                <>
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", borderBottom:`1px solid ${T.border}` }}>
+                    {[
+                      { lbl:"آخر تعبئة", val:toDateStr(last.date), color:T.text },
+                      { lbl:"العداد الحالي", val:`${last.currKm?.toLocaleString()} كلم`, color:T.gold },
+                      { lbl:"المسافة", val:`${last.dist?.toLocaleString()} كلم`, color:T.text },
+                    ].map((s,i) => (
+                      <div key={i} style={{ padding:"10px 10px", textAlign:"center", borderLeft:i<2?`1px solid ${T.border}`:"none" }}>
+                        <div style={{ color:s.color, ...GF, fontSize:13, fontWeight:700 }}>{s.val}</div>
+                        <div style={{ color:T.sub, ...GF, fontSize:10, marginTop:2 }}>{s.lbl}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {oilChk && <div style={{ padding:"8px 14px", background:oilChk.color+"15", color:oilChk.color, ...GF, fontSize:12, borderBottom:`1px solid ${T.border}` }}>{oilChk.msg}</div>}
+                </>
+              ) : <div style={{ padding:"14px 16px", color:T.sub, ...GF, fontSize:12 }}>لا يوجد سجل تعبئة بعد</div>}
+              {/* Add + History buttons */}
+              <div style={{ display:"flex", borderTop:`1px solid ${T.border}` }}>
+                <button onClick={()=>{ const lk=lastFuelKm(v.id); setForm({vehicleId:v.id,prevKm:lk||"",currKm:"",amount:""}); setShowAdd(true); }}
+                  style={{ flex:1, background:"none", border:"none", color:T.gold, ...GF, fontSize:13, fontWeight:700, padding:"11px", cursor:"pointer" }}>+ تسجيل تعبئة</button>
+                <button onClick={()=>setHistVeh(v)}
+                  style={{ flex:1, background:"none", border:"none", borderRight:`1px solid ${T.border}`, color:T.sub, ...GF, fontSize:13, padding:"11px", cursor:"pointer" }}>📂 السجل ({fuelRecords.filter(r=>r.vehicleId===v.id).length})</button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Add Modal */}
+      <Modal show={showAdd} onClose={()=>setShowAdd(false)} title="تسجيل تعبئة وقود">
+        <div style={{ background:T.card2, borderRadius:12, padding:"10px 14px", marginBottom:14, border:`1px solid ${T.gold}33` }}>
+          <div style={{ color:T.sub, ...GF, fontSize:11 }}>التاريخ (تلقائي)</div>
+          <div style={{ color:T.gold, ...GF, fontSize:14, fontWeight:700, marginTop:4 }}>{new Date().toLocaleDateString("ar-JO")} — {fmt12(new Date())}</div>
+        </div>
+        <FieldSelect label="رقم المركبة" value={form.vehicleId} onChange={v=>{ const lk=lastFuelKm(v); setForm(f=>({...f,vehicleId:v,prevKm:lk||""})); }} opts={vehicles.map(v=>({v:v.id,l:v.plate}))} req/>
+        <Field label="العداد السابق (كلم)" value={form.prevKm} onChange={v=>setForm(f=>({...f,prevKm:v}))} type="number" req/>
+        <Field label="العداد الحالي (كلم)" value={form.currKm} onChange={v=>setForm(f=>({...f,currKm:v}))} type="number" req/>
+        {form.prevKm && form.currKm && +form.currKm>+form.prevKm && (
+          <div style={{ background:T.card2, borderRadius:10, padding:"10px 14px", marginBottom:14, display:"flex", justifyContent:"space-between" }}>
+            <span style={{ color:T.sub, ...GF, fontSize:13 }}>المسافة المحسوبة</span>
+            <span style={{ color:T.green, ...GF, fontSize:15, fontWeight:700 }}>{(+form.currKm-+form.prevKm).toLocaleString()} كلم</span>
+          </div>
+        )}
+        <Field label="قيمة التعبئة (د.أ) — مثال: 45.500" value={form.amount} onChange={v=>setForm(f=>({...f,amount:v}))} type="number" req/>
+        {form.amount && form.prevKm && form.currKm && +form.currKm>+form.prevKm && (
+          <div style={{ background:T.card2, borderRadius:10, padding:"10px 14px", marginBottom:14, display:"flex", justifyContent:"space-between" }}>
+            <span style={{ color:T.sub, ...GF, fontSize:13 }}>تكلفة الكيلومتر</span>
+            <span style={{ color:T.green, ...GF, fontSize:15, fontWeight:700 }}>{(+form.amount/(+form.currKm-+form.prevKm)).toFixed(3)} د.أ/كلم</span>
+          </div>
+        )}
+        <Btn label={saving?"جارٍ الحفظ...":"✓ حفظ التعبئة"} onClick={addRecord} full color={T.gold} disabled={saving}/>
+      </Modal>
+
+      {/* Oil Alert */}
+      <Modal show={!!oilAlert} onClose={()=>setOilAlert(null)} title="تنبيه غيار الزيت 🔧">
+        {oilAlert && (
+          <div style={{ textAlign:"center", padding:"10px 0" }}>
+            <div style={{ fontSize:48, marginBottom:12 }}>{oilAlert.urgent?"🔴":"🟠"}</div>
+            <div style={{ color:oilAlert.color, ...GF, fontSize:17, fontWeight:700, marginBottom:8 }}>{oilAlert.plate}</div>
+            <div style={{ color:T.text, ...GF, fontSize:15, marginBottom:24 }}>{oilAlert.msg}</div>
+            <Btn label="حسناً، سأتخذ إجراءً" onClick={()=>setOilAlert(null)} full color={oilAlert.color}/>
+          </div>
+        )}
+      </Modal>
+
+      {/* Cost Alert */}
+      <Modal show={!!costAlert} onClose={()=>setCostAlert(null)} title="تنبيه تكلفة المحروقات ⚠️">
+        {costAlert && (
+          <div style={{ textAlign:"center", padding:"10px 0" }}>
+            <div style={{ fontSize:48, marginBottom:12 }}>🔍</div>
+            <div style={{ color:costAlert.color, ...GF, fontSize:17, fontWeight:700, marginBottom:8 }}>{costAlert.plate}</div>
+            <div style={{ color:T.text, ...GF, fontSize:15, marginBottom:12 }}>{costAlert.msg}</div>
+            <div style={{ background:T.card2, borderRadius:12, padding:16, marginBottom:24 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:8 }}>
+                <span style={{ color:T.sub, ...GF, fontSize:13 }}>التكلفة الحالية</span>
+                <span style={{ color:costAlert.color, ...GF, fontWeight:700 }}>{costAlert.cost} د.أ/كلم</span>
+              </div>
+              <div style={{ display:"flex", justifyContent:"space-between" }}>
+                <span style={{ color:T.sub, ...GF, fontSize:13 }}>المتوسط الطبيعي</span>
+                <span style={{ color:T.green, ...GF, fontWeight:700 }}>{costAlert.avg} د.أ/كلم</span>
+              </div>
+            </div>
+            <Btn label="راجعت وأؤكد" onClick={()=>setCostAlert(null)} full color={costAlert.color}/>
+          </div>
+        )}
+      </Modal>
+
+      {/* History Modal */}
+      <Modal show={!!histVeh} onClose={()=>setHistVeh(null)} title={`سجل تعبئة — ${histVeh?.plate}`}>
+        {histVeh && (() => {
+          const recs = fuelRecords.filter(r=>r.vehicleId===histVeh.id).sort((a,b)=>new Date(b.date)-new Date(a.date));
+          if (!recs.length) return <div style={{ textAlign:"center", color:T.sub, ...GF, padding:24 }}>لا يوجد سجل تعبئة بعد</div>;
+          const total = recs.reduce((s,r)=>s+(r.amount||0),0);
+          return (
+            <div>
+              <div style={{ background:T.blueSoft, border:`1px solid rgba(96,165,250,0.2)`, borderRadius:12, padding:"10px 14px", marginBottom:14, display:"flex", justifyContent:"space-between" }}>
+                <span style={{ color:T.sub, ...GF, fontSize:13 }}>إجمالي الإنفاق</span>
+                <span style={{ color:T.blue, ...GF, fontWeight:700, fontSize:15 }}>{total.toFixed(3)} د.أ</span>
+              </div>
+              {recs.map((r,i) => (
+                <div key={r.id} style={{ background:T.card2, borderRadius:12, padding:"12px 14px", marginBottom:10, borderRight:`3px solid ${T.blue}` }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+                    <span style={{ color:T.gold, ...GF, fontWeight:700 }}>#{recs.length-i}</span>
+                    <span style={{ color:T.sub, ...GF, fontSize:12 }}>{toDateStr(r.date)} — {fmt12(r.date)}</span>
+                  </div>
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                    {[
+                      {l:"قيمة التعبئة", v:`${r.amount?.toFixed(3)} د.أ`, c:T.gold},
+                      {l:"المسافة", v:`${r.dist?.toLocaleString()} كلم`, c:T.text},
+                      {l:"العداد", v:`${r.currKm?.toLocaleString()} كلم`, c:T.text},
+                      {l:"تكلفة/كلم", v:`${r.costPerKm?.toFixed(3)||"—"} د.أ`, c:T.green},
+                    ].map(s => (
+                      <div key={s.l} style={{ background:T.card3, borderRadius:8, padding:"8px 10px" }}>
+                        <div style={{ color:T.sub, ...GF, fontSize:10, marginBottom:3 }}>{s.l}</div>
+                        <div style={{ color:s.c, ...GF, fontSize:13, fontWeight:700 }}>{s.v}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
+      </Modal>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════
+// SETTINGS TAB
+// ══════════════════════════════════════════════════
+function SettingsTab({ noteOptions, saveNoteOptions, equipmentList, saveEquipment, savedPw, setSavedPw, vehicles, saveVehicles, saveOneVehicle, deleteVehicle, myPhone, setMyPhone, onLogout, onBack, fuelRecords, violations, maintenanceRecs }) {
+  const [open, setOpen] = useState(null);
+  const [newNote, setNewNote] = useState("");
+  const [newEq, setNewEq] = useState("");
+  const [newPw, setNewPw] = useState("");
+  const [cfmPw, setCfmPw] = useState("");
+  const [pwMsg, setPwMsg] = useState("");
+  const [phoneInput, setPhoneInput] = useState(myPhone||"");
+  const [phoneSaved, setPhoneSaved] = useState(false);
+  const [reportMonth, setReportMonth] = useState(() => { const n=new Date(); return n.getFullYear()+"-"+String(n.getMonth()+1).padStart(2,"0"); });
+  const [exportingReport, setExportingReport] = useState(false);
+  const [confirmNote, setConfirmNote] = useState(null); // index
+  const [confirmEquip, setConfirmEquip] = useState(null); // index
+
+  const changePw = () => {
+    if (!newPw) return;
+    if (newPw!==cfmPw) { setPwMsg("كلمتا المرور غير متطابقتين ❌"); return; }
+    setSavedPw(newPw); setNewPw(""); setCfmPw("");
+    setPwMsg("✅ تم تغيير كلمة المرور وحفظها");
+  };
+
+  const exportMonthlyReport = () => {
+    setExportingReport(true);
+    try {
+      const wb = XLSX.utils.book_new();
+      const mLabel = new Date(reportMonth+"-01").toLocaleDateString("ar-JO",{month:"long",year:"numeric"});
+
+      // ── ورقة 1: ملخص المركبات ──
+      const summaryRows = [["لوحة التسجيل","النوع","الماركة","مخالفات نشطة","إجمالي المخالفات (د.أ)","تكلفة الوقود (د.أ)","مسافة الشهر (كلم)","غيارات الزيت","حالة الترخيص","حالة التأمين"]];
+      vehicles.forEach(v => {
+        const vViol = violations.filter(x=>x.plate===v.plate && x.status!=="مسددة");
+        const vViolAmt = vViol.reduce((s,x)=>s+(+x.amount||0),0);
+        const vFuel = fuelRecords.filter(r=>r.vehicleId===v.id && r.date&&r.date.startsWith(reportMonth));
+        const fuelCost = vFuel.reduce((s,r)=>s+(+r.amount||0),0);
+        const fuelDist = vFuel.reduce((s,r)=>s+(+r.dist||0),0);
+        const vMaint = maintenanceRecs.filter(r=>r.vehicleId===v.id && r.date&&r.date.startsWith(reportMonth));
+        const licStatus = () => { if(!v.license_exp) return "غير مدخل"; const d=(new Date(v.license_exp)-new Date())/86400000; return d<0?"منتهي":d<=30?"قريب الانتهاء":"ساري"; };
+        const insStatus = () => { if(!v.insurance_exp) return "غير مدخل"; const d=(new Date(v.insurance_exp)-new Date())/86400000; return d<0?"منتهي":d<=30?"قريب الانتهاء":"ساري"; };
+        summaryRows.push([v.plate,v.type||"—",v.make||"—",vViol.length,vViolAmt.toFixed(2),fuelCost.toFixed(2),fuelDist,vMaint.length,licStatus(),insStatus()]);
+      });
+      // إجماليات
+      summaryRows.push(["","","","الإجماليات",
+        vehicles.reduce((s,v)=>s+violations.filter(x=>x.plate===v.plate&&x.status!=="مسددة").reduce((a,x)=>a+(+x.amount||0),0),0).toFixed(2),
+        fuelRecords.filter(r=>r.date&&r.date.startsWith(reportMonth)).reduce((s,r)=>s+(+r.amount||0),0).toFixed(2),
+        fuelRecords.filter(r=>r.date&&r.date.startsWith(reportMonth)).reduce((s,r)=>s+(+r.dist||0),0),
+        "","",""
+      ]);
+      const ws1 = XLSX.utils.aoa_to_sheet(summaryRows);
+      ws1["!cols"] = [{wch:14},{wch:14},{wch:14},{wch:12},{wch:18},{wch:16},{wch:16},{wch:12},{wch:16},{wch:16}];
+      XLSX.utils.book_append_sheet(wb, ws1, "ملخص الشهر");
+
+      // ── ورقة 2: المخالفات النشطة ──
+      const violRows = [["لوحة التسجيل","السائق","نوع المخالفة","التاريخ","المبلغ (د.أ)","الحالة","ملاحظة"]];
+      violations.filter(v=>v.status!=="مسددة").forEach(v=>{
+        violRows.push([v.plate,v.driver,v.vtype,v.vdate,v.amount,v.status,v.note||""]);
+      });
+      const ws2 = XLSX.utils.aoa_to_sheet(violRows);
+      ws2["!cols"] = [{wch:14},{wch:16},{wch:18},{wch:12},{wch:12},{wch:12},{wch:20}];
+      XLSX.utils.book_append_sheet(wb, ws2, "المخالفات النشطة");
+
+      // ── ورقة 3: سجل المحروقات للشهر ──
+      const fuelRows = [["لوحة التسجيل","التاريخ","العداد السابق","العداد الحالي","المسافة (كلم)","التكلفة (د.أ)","تكلفة/كلم"]];
+      fuelRecords.filter(r=>r.date&&r.date.startsWith(reportMonth)).forEach(r=>{
+        const veh = vehicles.find(v=>v.id===r.vehicleId);
+        fuelRows.push([veh?veh.plate:"—",r.date,r.prevKm,r.currKm,r.dist,r.amount,(r.costPerKm||0).toFixed(3)]);
+      });
+      const ws3 = XLSX.utils.aoa_to_sheet(fuelRows);
+      ws3["!cols"] = [{wch:14},{wch:12},{wch:14},{wch:14},{wch:14},{wch:12},{wch:12}];
+      XLSX.utils.book_append_sheet(wb, ws3, "المحروقات");
+
+      XLSX.writeFile(wb, `تقرير_الأسطول_${reportMonth}.xlsx`);
+      showToast("✅ تم تصدير التقرير");
+    } catch(e) { showToast("❌ خطأ في التصدير", T.red); }
+    setExportingReport(false);
+  };
+
+  const Section = ({ id, title, children }) => (
+    <div style={{ background:T.card, borderRadius:14, marginBottom:12, overflow:"hidden" }}>
+      <button onClick={()=>setOpen(open===id?null:id)} style={{ width:"100%", background:"none", border:"none", padding:"16px 18px", display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer" }}>
+        <span style={{ color:T.text, ...GF, fontSize:15 }}>{title}</span>
+        <span style={{ color:T.sub, fontSize:14 }}>{open===id?"▲":"▼"}</span>
+      </button>
+      {open===id && <div style={{ padding:"0 18px 18px", borderTop:`1px solid ${T.border}` }}><div style={{ marginTop:14 }}>{children}</div></div>}
+    </div>
+  );
+
+  return (
+    <div style={{ minHeight:"100vh", background:T.bg, direction:"rtl", paddingBottom:40 }}>
+      <Header title="⚙️ الإعدادات" onBack={onBack}/>
+      <div style={{ padding:16 }}>
+
+        <Section id="report" title="📊 التقرير الشهري الشامل">
+          <p style={{ color:T.sub, ...GF, fontSize:12, marginBottom:14 }}>تصدير Excel يشمل: ملخص كل مركبة، المخالفات النشطة، سجل المحروقات</p>
+          <div style={{ marginBottom:14 }}>
+            <label style={{ color:T.sub, fontSize:12, ...GF, display:"block", marginBottom:6 }}>اختر الشهر</label>
+            <input type="month" value={reportMonth} onChange={e=>setReportMonth(e.target.value)}
+              style={{ width:"100%", background:T.card2, border:`1px solid ${T.border}`, borderRadius:10, padding:"11px 14px", color:T.text, fontSize:14, ...GF, boxSizing:"border-box", outline:"none" }}/>
+          </div>
+          <Btn label={exportingReport?"جارٍ التصدير...":"📥 تصدير التقرير الشهري"} onClick={exportMonthlyReport} full color={T.gold} disabled={exportingReport}/>
+        </Section>
+
+        <Section id="pw" title="🔐 تغيير كلمة المرور">
+          <Field label="كلمة المرور الجديدة" value={newPw} onChange={setNewPw} type="password"/>
+          <Field label="تأكيد كلمة المرور" value={cfmPw} onChange={setCfmPw} type="password"/>
+          {pwMsg && <p style={{ color:pwMsg.includes("✅")?T.green:T.red, ...GF, fontSize:13, marginBottom:12 }}>{pwMsg}</p>}
+          <Btn label="حفظ كلمة المرور" onClick={changePw} full color={T.gold}/>
+        </Section>
+
+        <Section id="phone" title="📱 رقم الهاتف الشخصي للتنبيهات">
+          <p style={{ color:T.sub, ...GF, fontSize:12, marginBottom:12 }}>رقمك الشخصي لاستقبال تنبيهات الأولوية القصوى عبر واتساب</p>
+          <Field label="رقم الهاتف (مثال: 00962791234567)" value={phoneInput} onChange={setPhoneInput} placeholder="00962xxxxxxxxx"/>
+          <Btn label="✓ حفظ الرقم" onClick={()=>{ setMyPhone(phoneInput); setPhoneSaved(true); setTimeout(()=>setPhoneSaved(false),2000); }} full color={T.gold}/>
+          {phoneSaved && <p style={{ color:T.green, ...GF, fontSize:12, marginTop:8, textAlign:"center" }}>✅ تم حفظ الرقم</p>}
+          {myPhone && !phoneSaved && <p style={{ color:T.sub, ...GF, fontSize:12, marginTop:8, textAlign:"center" }}>الرقم الحالي: {myPhone}</p>}
+        </Section>
+
+        <Section id="vehicles" title="🚗 إدارة المركبات واستيراد البيانات">
+          <VehicleImporter vehicles={vehicles} saveVehicles={saveVehicles} saveOneVehicle={saveOneVehicle} deleteVehicle={deleteVehicle}/>
+        </Section>
+
+        <Section id="notes" title={`📝 ملاحظات المخالفات (${noteOptions.length})`}>
+          {noteOptions.map((n,i) => (
+            <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", background:T.card2, borderRadius:8, padding:"10px 12px", marginBottom:8 }}>
+              <span style={{ color:T.text, ...GF, fontSize:13 }}>{n}</span>
+              <button onClick={()=>setConfirmNote(i)} style={{ background:T.red+"22", border:"none", color:T.red, borderRadius:6, padding:"4px 10px", cursor:"pointer", ...GF, fontSize:12 }}>حذف</button>
+            </div>
+          ))}
+          <div style={{ display:"flex", gap:8, marginTop:10 }}>
+            <input value={newNote} onChange={e=>setNewNote(e.target.value)} placeholder="ملاحظة جديدة"
+              style={{ flex:1, background:T.card2, border:`1px solid ${T.border}`, borderRadius:8, padding:"9px 12px", color:T.text, ...GF, fontSize:13, outline:"none" }}/>
+            <button onClick={()=>{ if(newNote){ saveNoteOptions([...noteOptions,newNote]); setNewNote(""); } }}
+              style={{ background:T.gold, border:"none", color:"#000", borderRadius:8, padding:"9px 18px", cursor:"pointer", ...GF, fontWeight:700, fontSize:16 }}>+</button>
+          </div>
+        </Section>
+
+        <Section id="equip" title={`🔩 عدة المركبة (${equipmentList.length})`}>
+          {equipmentList.map((e,i) => (
+            <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", background:T.card2, borderRadius:8, padding:"10px 12px", marginBottom:8 }}>
+              <span style={{ color:T.text, ...GF, fontSize:13 }}>{e}</span>
+              <button onClick={()=>setConfirmEquip(i)} style={{ background:T.red+"22", border:"none", color:T.red, borderRadius:6, padding:"4px 10px", cursor:"pointer", ...GF, fontSize:12 }}>حذف</button>
+            </div>
+          ))}
+          <div style={{ display:"flex", gap:8, marginTop:10 }}>
+            <input value={newEq} onChange={e=>setNewEq(e.target.value)} placeholder="عنصر جديد"
+              style={{ flex:1, background:T.card2, border:`1px solid ${T.border}`, borderRadius:8, padding:"9px 12px", color:T.text, ...GF, fontSize:13, outline:"none" }}/>
+            <button onClick={()=>{ if(newEq){ saveEquipment([...equipmentList,newEq]); setNewEq(""); } }}
+              style={{ background:T.gold, border:"none", color:"#000", borderRadius:8, padding:"9px 18px", cursor:"pointer", ...GF, fontWeight:700, fontSize:16 }}>+</button>
+          </div>
+        </Section>
+
+        <button onClick={onLogout}
+          style={{ width:"100%", background:T.red+"22", border:`1px solid ${T.red}44`, borderRadius:14, padding:"14px", color:T.red, ...GF, fontSize:15, fontWeight:700, cursor:"pointer", marginTop:8 }}>
+          🚪 تسجيل الخروج
+        </button>
+      </div>
+
+      <ConfirmDialog
+        show={confirmNote!==null}
+        title="⚠️ حذف ملاحظة"
+        body={confirmNote!==null ? `هل تريد حذف الملاحظة "${noteOptions[confirmNote]}"؟` : ""}
+        onConfirm={()=>{ saveNoteOptions(noteOptions.filter((_,j)=>j!==confirmNote)); setConfirmNote(null); }}
+        onCancel={()=>setConfirmNote(null)}
+      />
+      <ConfirmDialog
+        show={confirmEquip!==null}
+        title="⚠️ حذف عنصر"
+        body={confirmEquip!==null ? `هل تريد حذف "${equipmentList[confirmEquip]}" من قائمة العدة؟` : ""}
+        onConfirm={()=>{ saveEquipment(equipmentList.filter((_,j)=>j!==confirmEquip)); setConfirmEquip(null); }}
+        onCancel={()=>setConfirmEquip(null)}
+      />
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════
+// DRIVERS TAB
+// ══════════════════════════════════════════════════
+function DriversTab({ drivers, handovers, vehicles, saveDriver, deleteDriver, saveHandovers, myPhone, onBack }) {
+  const [search, setSearch] = useState("");
+  const [showAdd, setShowAdd] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [histDriver, setHistDriver] = useState(null);
+  const [quickHandover, setQuickHandover] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [confirmDel, setConfirmDel] = useState(null); // { id, name }
+
+  const getStatus = name => {
+    const dh = handovers.filter(h=>h.driver===name).sort((a,b)=>new Date(a.date)-new Date(b.date));
+    if (!dh.length) return null;
+    const last = dh[dh.length-1];
+    if (last.type==="استلام") {
+      const veh = vehicles.find(v=>v.id===last.vehicleId);
+      return { plate:veh?.plate||"—", since:last.date, vehicleId:last.vehicleId };
+    }
+    return null;
+  };
+
+  const displayed = [...drivers].sort((a,b)=>{
+    const sa=!!getStatus(a.name), sb=!!getStatus(b.name);
+    if(sa&&!sb)return -1; if(!sa&&sb)return 1; return a.name.localeCompare(b.name,"ar");
+  }).filter(d=>!search||d.name.includes(search));
+
+  const busyCount = drivers.filter(d=>getStatus(d.name)).length;
+
+  const addDriver = async () => {
+    if (!newName.trim()||saving) return;
+    if (drivers.find(d=>d.name===newName.trim())) { showToast("⚠️ الاسم موجود مسبقاً",T.orange); return; }
+    setSaving(true);
+    await saveDriver({ id:uid(), name:newName.trim() });
+    setNewName(""); setShowAdd(false); setSaving(false);
+  };
+
+  const doQuickHandover = async () => {
+    if (!quickHandover||saving) return;
+    setSaving(true);
+    const submitTime = new Date();
+    const rec = { id:uid(), vehicleId:quickHandover.vehicleId, type:"تسليم", driver:quickHandover.name,
+      date:submitTime.toISOString(), equip:{}, photos:{f:null,b:null,r:null,l:null}, signature:null };
+    await saveHandovers(rec);
+    if (myPhone) {
+      const veh = vehicles.find(v=>v.id===quickHandover.vehicleId);
+      sendWA(myPhone, `🔑 *سند تسليم — الأثر الذهبي*\n\n🚗 المركبة: ${veh?.plate||"—"}\n👤 السائق: ${quickHandover.name}\n📅 ${submitTime.toLocaleDateString("ar-JO")} ${fmt12(submitTime)}`);
+    }
+    setQuickHandover(null); setSaving(false);
+  };
+
+  return (
+    <div style={{ minHeight:"100vh", background:T.bg, direction:"rtl", paddingBottom:40 }}>
+      <Header title="👤 السائقون" onBack={onBack}
+        right={<button onClick={()=>setShowAdd(true)} style={{ background:T.gold, color:"#000", border:"none", borderRadius:8, padding:"7px 14px", ...GF, fontSize:13, fontWeight:700, cursor:"pointer" }}>+ إضافة</button>}
+      />
+
+      {/* ── Summary Row ── */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, padding:"14px 14px 0" }}>
+        {[
+          { label:"إجمالي السائقين", value:drivers.length, color:T.gold },
+          { label:"يقودون الآن", value:busyCount, color:busyCount>0?T.red:T.sub },
+          { label:"متاحون", value:drivers.length-busyCount, color:T.green },
+        ].map((s,i) => (
+          <div key={i} style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:12, padding:"10px 12px", textAlign:"center", boxShadow:T.shadow }}>
+            <div style={{ color:s.color, ...GF, fontSize:17, fontWeight:900 }}>{s.value}</div>
+            <div style={{ color:T.sub, ...GF, fontSize:10, marginTop:3, fontWeight:600 }}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Search ── */}
+      <div style={{ padding:"12px 14px 0" }}>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 بحث باسم السائق"
+          style={{ width:"100%", background:T.card2, border:`1px solid ${T.border}`, borderRadius:10, padding:"10px 14px", color:T.text, fontSize:13, ...GF, boxSizing:"border-box", outline:"none" }}/>
+      </div>
+
+      {/* ── Driver Cards ── */}
+      <div style={{ padding:"12px 14px" }}>
+        {displayed.length===0 && (
+          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", padding:"50px 30px", textAlign:"center" }}>
+            <div style={{ width:80, height:80, background:T.card2, border:`2px dashed ${T.border2}`, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:34, marginBottom:20 }}>👤</div>
+            <div style={{ color:T.text, ...GF, fontSize:16, fontWeight:800, marginBottom:8 }}>{search?"لا توجد نتائج":"لا يوجد سائقون بعد"}</div>
+            {!search && <div style={{ color:T.sub, ...GF, fontSize:13, marginBottom:24 }}>أضف السائقين لمتابعة حركة المركبات وسجل الاستلام والتسليم</div>}
+            {!search && <button onClick={()=>setShowAdd(true)} style={{ background:T.gold, color:"#000", border:"none", borderRadius:12, padding:"12px 24px", ...GF, fontSize:14, fontWeight:800, cursor:"pointer" }}>+ إضافة أول سائق</button>}
+          </div>
+        )}
+        {displayed.map(d => {
+          const status = getStatus(d.name);
+          const isActive = !!status;
+          return (
+            <div key={d.id} style={{ background:T.card, borderRadius:16, marginBottom:10, border:`1px solid ${T.border}`, boxShadow:T.shadow, overflow:"hidden" }}>
+              {/* Main row */}
+              <div style={{ padding:"14px 14px 12px", display:"flex", alignItems:"center", gap:12 }}>
+                {/* Avatar */}
+                <div style={{ width:46, height:46, borderRadius:23, background:isActive?T.redSoft:T.greenSoft, border:`2px solid ${isActive?"rgba(239,68,68,0.25)":"rgba(34,197,94,0.25)"}`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, fontSize:20 }}>
+                  👤
+                </div>
+                {/* Info */}
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ color:T.text, ...GF, fontWeight:800, fontSize:15, marginBottom:5 }}>{d.name}</div>
+                  <span style={{ display:"inline-flex", alignItems:"center", gap:4, background:isActive?T.redSoft:T.greenSoft, color:isActive?T.red:T.green, border:`1px solid ${isActive?"rgba(239,68,68,0.2)":"rgba(34,197,94,0.2)"}`, borderRadius:20, padding:"3px 10px", fontSize:11, fontWeight:700, ...GF }}>
+                    {isActive ? `🔴 ${status.plate}` : "🟢 متاح"}
+                  </span>
+                </div>
+                {/* Actions */}
+                <div style={{ display:"flex", gap:6, flexShrink:0 }}>
+                  {isActive && (
+                    <button onClick={()=>setQuickHandover({...status,name:d.name})}
+                      style={{ background:T.orangeSoft, border:`1px solid rgba(251,146,60,0.25)`, color:T.orange, borderRadius:8, padding:"7px 10px", cursor:"pointer", ...GF, fontSize:12, fontWeight:700 }}>تسليم</button>
+                  )}
+                  <button onClick={()=>setHistDriver(d)}
+                    style={{ background:T.card2, border:`1px solid ${T.border2}`, color:T.sub2, borderRadius:8, padding:"7px 10px", cursor:"pointer", fontSize:14 }}>📂</button>
+                  <button onClick={()=>setConfirmDel({ id:d.id, name:d.name })}
+                    style={{ background:T.redSoft, border:`1px solid rgba(239,68,68,0.2)`, color:T.red, borderRadius:8, padding:"7px 10px", cursor:"pointer", fontSize:13 }}>✕</button>
+                </div>
+              </div>
+              {/* Status footer */}
+              {isActive && (
+                <div style={{ background:T.redSoft, borderTop:`1px solid rgba(239,68,68,0.1)`, padding:"8px 14px" }}>
+                  <span style={{ color:T.sub, ...GF, fontSize:11 }}>يقود منذ </span>
+                  <span style={{ color:T.text, ...GF, fontSize:11, fontWeight:600 }}>{toDateStr(status.since)} {fmt12(status.since)}</span>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Modal: إضافة سائق */}
+      <Modal show={showAdd} onClose={()=>{ setShowAdd(false); setNewName(""); }} title="إضافة سائق جديد">
+        <Field label="اسم السائق الكامل *" value={newName} onChange={setNewName} placeholder="مثال: محمد أحمد" req/>
+        <Btn label={saving?"جارٍ الحفظ...":"✓ حفظ السائق"} onClick={addDriver} full color={T.gold} disabled={saving||!newName.trim()}/>
+      </Modal>
+
+      {/* Modal: تأكيد التسليم السريع */}
+      <Modal show={!!quickHandover} onClose={()=>setQuickHandover(null)} title="تأكيد التسليم">
+        {quickHandover && (
+          <div style={{ textAlign:"center", padding:"10px 0" }}>
+            <div style={{ fontSize:52, marginBottom:12 }}>🔑</div>
+            <div style={{ color:T.text, ...GF, fontSize:17, fontWeight:700, marginBottom:16 }}>{quickHandover.name}</div>
+            <div style={{ background:T.card2, borderRadius:14, padding:"16px", marginBottom:24 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", padding:"8px 0", borderBottom:`1px solid ${T.border}` }}>
+                <span style={{ color:T.sub, ...GF, fontSize:13 }}>المركبة</span>
+                <span style={{ color:T.gold, ...GF, fontWeight:700, fontSize:15 }}>🚗 {quickHandover.plate}</span>
+              </div>
+              <div style={{ display:"flex", justifyContent:"space-between", padding:"8px 0", borderBottom:`1px solid ${T.border}` }}>
+                <span style={{ color:T.sub, ...GF, fontSize:13 }}>مستلم منذ</span>
+                <span style={{ color:T.text, ...GF, fontSize:13 }}>{toDateStr(quickHandover.since)} {fmt12(quickHandover.since)}</span>
+              </div>
+              <div style={{ display:"flex", justifyContent:"space-between", padding:"8px 0" }}>
+                <span style={{ color:T.sub, ...GF, fontSize:13 }}>وقت التسليم</span>
+                <span style={{ color:T.green, ...GF, fontSize:13 }}>{new Date().toLocaleDateString("ar-JO")} {fmt12(new Date())}</span>
+              </div>
+            </div>
+            <Btn label={saving?"جارٍ التسجيل...":"✓ تأكيد التسليم"} onClick={doQuickHandover} full color={T.orange} disabled={saving}/>
+          </div>
+        )}
+      </Modal>
+
+      {/* Modal: سجل السائق الكامل */}
+      <Modal show={!!histDriver} onClose={()=>setHistDriver(null)} title={`📂 سجل — ${histDriver?.name}`}>
+        {histDriver && (() => {
+          const records = handovers.filter(h=>h.driver===histDriver.name).sort((a,b)=>new Date(b.date)-new Date(a.date));
+          const totalReceive = records.filter(r=>r.type==="استلام").length;
+          const totalReturn = records.filter(r=>r.type==="تسليم").length;
+          const uniqueVehs = [...new Set(records.map(r=>r.vehicleId))].length;
+          if (!records.length) return <div style={{ textAlign:"center", color:T.sub, ...GF, padding:32 }}>لا يوجد سجل بعد</div>;
+          return (
+            <div>
+              {/* ملخص */}
+              <div style={{ display:"flex", gap:8, marginBottom:16 }}>
+                <div style={{ flex:1, background:T.card2, borderRadius:10, padding:"10px", textAlign:"center" }}>
+                  <div style={{ color:T.blue, ...GF, fontSize:18, fontWeight:700 }}>{totalReceive}</div>
+                  <div style={{ color:T.sub, ...GF, fontSize:11 }}>استلام</div>
+                </div>
+                <div style={{ flex:1, background:T.card2, borderRadius:10, padding:"10px", textAlign:"center" }}>
+                  <div style={{ color:T.green, ...GF, fontSize:18, fontWeight:700 }}>{totalReturn}</div>
+                  <div style={{ color:T.sub, ...GF, fontSize:11 }}>تسليم</div>
+                </div>
+                <div style={{ flex:1, background:T.card2, borderRadius:10, padding:"10px", textAlign:"center" }}>
+                  <div style={{ color:T.gold, ...GF, fontSize:18, fontWeight:700 }}>{uniqueVehs}</div>
+                  <div style={{ color:T.sub, ...GF, fontSize:11 }}>مركبات</div>
+                </div>
+              </div>
+              {/* السجل */}
+              {records.map(h => {
+                const hc = h.type==="استلام" ? T.blue : T.green;
+                const veh = vehicles.find(v=>v.id===h.vehicleId);
+                return (
+                  <div key={h.id} style={{ background:T.card2, borderRadius:12, padding:"12px 14px", marginBottom:10, borderRight:`3px solid ${hc}` }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
+                      <Badge label={h.type} color={hc}/>
+                      <span style={{ color:T.sub, ...GF, fontSize:12 }}>{toDateStr(h.date)} {fmt12(h.date)}</span>
+                    </div>
+                    <div style={{ color:T.gold, ...GF, fontWeight:700, fontSize:14 }}>🚗 {veh?.plate||"مركبة محذوفة"}</div>
+                    {veh?.type && <div style={{ color:T.sub, ...GF, fontSize:12, marginTop:2 }}>{veh.type}</div>}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
+      </Modal>
+      <ConfirmDialog
+        show={!!confirmDel}
+        title="⚠️ حذف سائق"
+        body={confirmDel ? `هل تريد حذف السائق "${confirmDel.name}" نهائياً؟` : ""}
+        onConfirm={async()=>{ await deleteDriver(confirmDel.id); setConfirmDel(null); }}
+        onCancel={()=>setConfirmDel(null)}
+      />
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════
+// ROOT APP
+// ══════════════════════════════════════════════════
+function App() {
+  const [screen,setScreen]=useState("loading");
+  const [savedPw,setSavedPw]=useState("1234");
+  const [myPhone,setMyPhone]=useState("");
+  const [vehicles,setVehicles]=useState([]);
+  const [violations,setViolations]=useState([]);
+  const [handovers,setHandovers]=useState([]);
+  const [maintenanceRecs,setMaintenanceRecs]=useState([]);
+  const [fuelRecords,setFuelRecords]=useState([]);
+  const [noteOptions,setNoteOptions]=useState(DEFAULT_NOTES);
+  const [equipmentList,setEquipmentList]=useState(DEFAULT_EQUIP);
+  const [drivers,setDrivers]=useState([]);
+
+  const loadAll=useCallback(async()=>{
+    try{
+      const [vehs,viols,hands,maints,fuels,drvs,pw,phone,notes,equip]=await Promise.all([
+        DB.getVehicles(),DB.getViolations(),DB.getHandovers(),DB.getMaintenance(),DB.getFuel(),
+        DB.getDrivers(),
+        DB.getSetting("password","1234"),DB.getSetting("my_phone",""),
+        DB.getSetting("note_options",""),DB.getSetting("equip_list",""),
+      ]);
+      setVehicles(vehs);setViolations(viols);setHandovers(hands);setMaintenanceRecs(maints);setFuelRecords(fuels);
+      setDrivers(drvs);
+      setSavedPw(pw||"1234");setMyPhone(phone||"");
+      if(notes){try{setNoteOptions(JSON.parse(notes));}catch{}}
+      if(equip){try{setEquipmentList(JSON.parse(equip));}catch{}}
+      const loggedIn=localStorage.getItem("gm_fleet_v2")==="1";
+      setScreen(loggedIn?"main":"login");
+    }catch(e){console.error("Load error:",e);setScreen("login");}
+  },[]);
+
+  useEffect(()=>{loadAll();},[loadAll]);
+
+  const nav=s=>setScreen(s);
+  const back=()=>setScreen("main");
+  const login=()=>{localStorage.setItem("gm_fleet_v2","1");setScreen("main");};
+  const logout=()=>{localStorage.removeItem("gm_fleet_v2");setScreen("login");};
+  const refresh=()=>loadAll();
+
+  // Supabase save wrappers — تحديث الحالة محلياً فوراً بدون إعادة تحميل كاملة
+  const saveViolation=async v=>{
+    await DB.saveViolation(v);
+    setViolations(prev=>{const idx=prev.findIndex(x=>x.id===v.id);return idx>=0?prev.map(x=>x.id===v.id?v:x):[...prev,v];});
+  };
+  const saveHandover=async h=>{
+    await DB.saveHandover(h);
+    setHandovers(prev=>{const idx=prev.findIndex(x=>x.id===h.id);return idx>=0?prev.map(x=>x.id===h.id?h:x):[h,...prev];});
+  };
+  const saveMaintenance=async m=>{
+    await DB.saveMaintenance(m);
+    setMaintenanceRecs(prev=>{const idx=prev.findIndex(x=>x.id===m.id);return idx>=0?prev.map(x=>x.id===m.id?m:x):[...prev,m];});
+  };
+  const saveFuel=async f=>{
+    await DB.saveFuel(f);
+    setFuelRecords(prev=>{const idx=prev.findIndex(x=>x.id===f.id);return idx>=0?prev.map(x=>x.id===f.id?f:x):[f,...prev];});
+  };
+  const saveVehicles=async vs=>{
+    for(const v of vs)await DB.saveVehicle(v);
+    setVehicles(vs);
+  };
+  const saveOneVehicle=async v=>{
+    await DB.saveVehicle(v);
+    setVehicles(prev=>{const idx=prev.findIndex(x=>x.id===v.id);return idx>=0?prev.map(x=>x.id===v.id?v:x):[...prev,v];});
+  };
+  const deleteVehicle=async id=>{
+    await DB.deleteVehicle(id);
+    setVehicles(prev=>prev.filter(v=>v.id!==id));
+  };
+  const saveNoteOptions=async opts=>{await DB.setSetting("note_options",JSON.stringify(opts));setNoteOptions(opts);};
+  const saveEquipment=async opts=>{await DB.setSetting("equip_list",JSON.stringify(opts));setEquipmentList(opts);};
+  const savePw=async p=>{await DB.setSetting("password",p);setSavedPw(p);};
+  const savePhone=async p=>{await DB.setSetting("my_phone",p);setMyPhone(p);};
+  const saveDriver=async d=>{
+    await DB.saveDriver(d);
+    setDrivers(prev=>{const idx=prev.findIndex(x=>x.id===d.id);return idx>=0?prev.map(x=>x.id===d.id?d:x):[...prev,d];});
+  };
+  const deleteDriver=async id=>{
+    await DB.deleteDriver(id);
+    setDrivers(prev=>prev.filter(d=>d.id!==id));
+  };
+
+  const notifications=buildNotifications(violations,vehicles,maintenanceRecs,fuelRecords);
+
+  if(screen==="loading")return <div style={{minHeight:"100vh",background:T.bg,display:"flex",alignItems:"center",justifyContent:"center",direction:"rtl"}}><div style={{textAlign:"center"}}><div style={{fontSize:44,marginBottom:12}}>🚗</div><div style={{color:T.gold,...GF,fontSize:16}}>جارٍ التحميل...</div></div></div>;
+  if(screen==="login")return <LoginScreen savedPw={savedPw} onLogin={login}/>;
+  if(screen==="main")return <MainScreen onNav={nav} notifications={notifications} myPhone={myPhone} vehicles={vehicles} violations={violations} handovers={handovers} fuelRecords={fuelRecords} drivers={drivers} maintenanceRecs={maintenanceRecs} saveViolation={saveViolation} saveHandover={saveHandover} saveFuel={saveFuel} saveMaintenance={saveMaintenance} noteOptions={noteOptions} equipmentList={equipmentList}/>;
+  if(screen==="myvehicles")return <MyVehiclesTab vehicles={vehicles} violations={violations} maintenanceRecs={maintenanceRecs} fuelRecords={fuelRecords} handovers={handovers} saveOneVehicle={saveOneVehicle} onBack={back}/>;
+  if(screen==="violations")return <ViolationsTab violations={violations} saveViolations={saveViolation} vehicles={vehicles} noteOptions={noteOptions} myPhone={myPhone} onBack={back}/>;
+  if(screen==="license")return <LicenseTab vehicles={vehicles} saveVehicles={saveVehicles} saveOneVehicle={saveOneVehicle} onBack={back}/>;
+  if(screen==="handover")return <HandoverTab handovers={handovers} saveHandovers={saveHandover} vehicles={vehicles} equipmentList={equipmentList} myPhone={myPhone} drivers={drivers} onBack={back}/>;
+  if(screen==="drivers")return <DriversTab drivers={drivers} handovers={handovers} vehicles={vehicles} saveDriver={saveDriver} deleteDriver={deleteDriver} saveHandovers={saveHandover} myPhone={myPhone} onBack={back}/>;
+  if(screen==="maintenance")return <MaintenanceTab records={maintenanceRecs} saveRecords={saveMaintenance} vehicles={vehicles} fuelRecords={fuelRecords} onBack={back}/>;
+  if(screen==="fuel")return <FuelTab fuelRecords={fuelRecords} saveFuelRecords={saveFuel} vehicles={vehicles} maintenanceRecs={maintenanceRecs} onBack={back}/>;
+  if(screen==="settings")return <SettingsTab noteOptions={noteOptions} saveNoteOptions={saveNoteOptions} equipmentList={equipmentList} saveEquipment={saveEquipment} savedPw={savedPw} setSavedPw={savePw} vehicles={vehicles} saveVehicles={saveVehicles} saveOneVehicle={saveOneVehicle} deleteVehicle={deleteVehicle} myPhone={myPhone} setMyPhone={savePhone} onLogout={logout} onBack={back} fuelRecords={fuelRecords} violations={violations} maintenanceRecs={maintenanceRecs}/>;
+  return null;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
+if("serviceWorker" in navigator){
+  navigator.serviceWorker.register("/fleet/sw.js").catch(()=>{});
+}
+
+</script>
+</body>
+</html>
